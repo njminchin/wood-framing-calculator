@@ -208,7 +208,7 @@ function renderCutList() {
   const cornerRows = frame.corners.map((c) => `<tr>
       <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
       <td class="num">${f2(c.angle)}°</td>
-      <td class="num angle">${f2(c.miter)}°</td>
+      <td class="num angle">${f2(c.mitre)}°</td>
       <td>${tapeCell(c.tape)}</td>
       <td class="num">${f2(c.tape.result)}°</td>
       <td class="num">${Math.abs(c.tape.error) < 0.005 ? '0.00' : (c.tape.error > 0 ? '+' : '') + f2(c.tape.error)}°</td>
@@ -231,11 +231,11 @@ function renderCutList() {
     </div>
 
     <h3>Cut list - 4 L assemblies</h3>
-    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then miter both ends of the L in one cut. Long point = outer (visible) edge of the good wood.</p>
+    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then mitre both ends of the L in one cut. Long point = outer (visible) edge of the good wood.</p>
     <div class="table-wrap"><table class="table">
       <thead>
         <tr class="group-head"><th></th><th colspan="2" class="num">Good wood</th><th colspan="2" class="num">Cheap wood</th><th></th></tr>
-        <tr><th>Side</th><th class="num">Long point</th><th class="num">Short point</th><th class="num">Outer edge</th><th class="num">Inner edge</th><th>Miter at each end</th></tr>
+        <tr><th>Side</th><th class="num">Long point</th><th class="num">Short point</th><th class="num">Outer edge</th><th class="num">Inner edge</th><th>Mitre at each end</th></tr>
       </thead>
       <tbody>${stripsRows}</tbody>
     </table></div>
@@ -254,7 +254,7 @@ function renderCutList() {
 
     <h3>Corners &amp; tape shims</h3>
     <div class="table-wrap"><table class="table">
-      <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Miter (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
+      <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Mitre (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
       <tbody>${cornerRows}</tbody>
     </table></div>
     <p class="note">Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.</p>
@@ -270,7 +270,7 @@ function renderCutList() {
         <div>The strip goes on the <b>${face.side} side</b> of the fence so the long point ends up on the outside of the frame${
           s.fenceEdge === 'goodInner' ? '. Lay the L <b>upside down</b>: the good wood\'s front edge on the sled, the cheap wood on top reaching over the fence.' : '.'}</div>
         <ul>
-          <li><span class="tag far">FAR end</span> tape on the fence ~${f1(s.tapeDistance)} mm from the blade makes the miter <b>${farEffect}</b> than 45°.</li>
+          <li><span class="tag far">FAR end</span> tape on the fence ~${f1(s.tapeDistance)} mm from the blade makes the mitre <b>${farEffect}</b> than 45°.</li>
           <li><span class="tag near">NEAR blade</span> tape on the fence right next to the blade makes it <b>${nearEffect}</b> than 45°.</li>
           <li>Stack the layers at one point only - the strip should still touch the bare fence (or its tape) at both points.</li>
         </ul>
@@ -282,11 +282,11 @@ function renderCutList() {
 // Bird's-eye view of the 45° sled: blade at the top, the fence running away from
 // the kerf down to the right, and the L strip against one side of it.
 // Cut list rows in Top, Bottom, Left, Right order. Opposite strips that come out
-// identical (same lengths and the same pair of miter angles) share one row.
+// identical (same lengths and the same pair of mitre angles) share one row.
 function stripGroups(frame) {
   const byKey = Object.fromEntries(frame.strips.map((st) => [st.key, st]));
   const lengths = (st) => [st.good.longPoint, st.good.shortPoint, st.cheap.longPoint, st.cheap.shortPoint].map(f1).join('|');
-  const endsOf = (st) => [st.corners[1], st.corners[0]].map((c) => ({ angle: f2(frame.corners[c].miter), key: frame.corners[c].key }));
+  const endsOf = (st) => [st.corners[1], st.corners[0]].map((c) => ({ angle: f2(frame.corners[c].mitre), key: frame.corners[c].key }));
   const angles = (st) => endsOf(st).map((e) => e.angle).sort().join('|');
   const groups = [];
   for (const [a, b, name] of [['top', 'bottom', 'Top & Bottom'], ['left', 'right', 'Left & Right']]) {

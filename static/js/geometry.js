@@ -164,7 +164,7 @@ export const FENCE_FACES = {
 export const onInnerSide = (fenceEdge) => fenceEdge !== 'outer';
 
 /**
- * Masking-tape shim plan for one miter cut on a fixed 45 degree sled fence.
+ * Masking-tape shim plan for one mitre cut on a fixed 45 degree sled fence.
  *
  * The strip bears on the fence at two points: one right beside the blade and
  * one `tapeDistance` mm further along the fence. Tape of total thickness t at
@@ -173,9 +173,9 @@ export const onInnerSide = (fenceEdge) => fenceEdge !== 'outer';
  *  - Tape at the FAR point pushes the far end of the strip's fence edge into the
  *    workpiece side, shrinking the angle at the fence-side corner of the cut.
  *  - Tape NEAR the blade does the opposite.
- * The miter angle we care about is the acute angle at the long point. If the
- * OUTER (long) edge rides the fence that corner IS the miter angle; if the
- * INNER (short) edge rides the fence the miter angle is its supplement.
+ * The mitre angle we care about is the acute angle at the long point. If the
+ * OUTER (long) edge rides the fence that corner IS the mitre angle; if the
+ * INNER (short) edge rides the fence the mitre angle is its supplement.
  *
  * Rounding to whole layers prefers the slightly more acute (smaller) result so
  * the joint closes tight at the visible outside corner.
@@ -258,16 +258,16 @@ export function computeFrame(painting, s) {
     polys[name] = { inner: offsetPolygon(quad.pts, l.dIn), outer: offsetPolygon(quad.pts, l.dOut) };
   }
 
-  const miter = quad.angles.map((a) => a / 2);
-  const tape = miter.map((m) => tapePlan(m, s));
+  const mitre = quad.angles.map((a) => a / 2);
+  const tape = mitre.map((m) => tapePlan(m, s));
 
   const corners = CORNERS.map((c, i) => {
     const t = tape[i];
     // Both strips at a corner get the same cut, so the joint error is double.
     // Faces meet at the long point; the gap opens at the short point.
-    const face = tg / Math.sin(miter[i] * DEG);
+    const face = tg / Math.sin(mitre[i] * DEG);
     const opening = face * Math.sin(Math.abs(2 * t.error) * DEG);
-    return { ...c, index: i, angle: quad.angles[i], miter: miter[i], tape: t, jointOpening: opening, openingAt: t.error <= 0 ? 'inner' : 'outer' };
+    return { ...c, index: i, angle: quad.angles[i], mitre: mitre[i], tape: t, jointOpening: opening, openingAt: t.error <= 0 ? 'inner' : 'outer' };
   });
 
   const strips = SIDES.map((side, i) => {

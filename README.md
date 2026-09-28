@@ -54,7 +54,7 @@ The 3D view needs WebGL. Chromium on a Pi 4 or 5 handles it; a Pi 3 will be slow
 - **Inputs** (mm): top and bottom widths, left and right heights ("same as" ticked by default), canvas depth, and optionally the two diagonals. Also the SKU, title and artist. Artist names are remembered for the dropdown.
 - **Frame settings**, saved with each painting: good wood thickness, cheap wood thickness and width, whether the cheap strip sits against the inside face of the good wood or underneath it, the gap to the painting, and the lip (negative recesses the frame). Use *Save as defaults* to make them the starting values for new paintings.
 - **Cutting setup**: the distance of the far tape point from the blade, the thickness of one layer of masking tape, which face of the L rides the 45° fence, and the saw kerf.
-- **Cut list**: long-point and short-point lengths for all 8 strips, the corner angles and the miter angle at each end, and the tape shim for each corner (near the blade or at the far end, and how many layers). It also shows the result you'll actually cut and the expected joint gap.
+- **Cut list**: long-point and short-point lengths for all 8 strips, the corner angles and the mitre angle at each end, and the tape shim for each corner (near the blade or at the far end, and how many layers). It also shows the result you'll actually cut and the expected joint gap.
 - **3D model**: rotate and zoom it, show or hide the painting and the measurements, paint the top of the cheap wood black, see an exploded view, and upload the painting's image (a default image is used otherwise). *Save PNG* saves a picture of the view.
 - **Technical drawing**: the front view, section A-A through the L profile, and all 8 strips with dimensions. You can print it or download it as an SVG.
 
@@ -64,9 +64,9 @@ Everything you type is also kept as a draft in the browser, so a refresh doesn't
 
 - **Painting shape.** Four side lengths don't fix a shape, because a canvas can rack. If you enter diagonals, the shape that matches them is used. Otherwise the app uses the maximum-area ("most square") shape. That is a true rectangle when opposite sides are equal, and a symmetric trapezoid when only one pair differs. The cut list shows the diagonals this shape implies, so you can check them against the canvas.
 - **Strip lengths.** The frame's inside follows the painting at the chosen gap. Each strip's length at a distance *d* out from a painting side of length *s* is `s + d·(cot(A/2) + cot(B/2))`, where A and B are the corner angles at its ends. For a rectangle this is `s + 2d`.
-- **Tape shims.** With tape of total thickness *t* at one of two fence contact points *D* apart, the strip turns by `atan(t / D)`. Layers are rounded towards the slightly more **acute** miter, so the joint closes at the visible outside corner and any gap is on the inside, against the painting. The exception is when the nearest whole number of layers is already within 0.01°.
+- **Tape shims.** With tape of total thickness *t* at one of two fence contact points *D* apart, the strip turns by `atan(t / D)`. Layers are rounded towards the slightly more **acute** mitre, so the joint closes at the visible outside corner and any gap is on the inside, against the painting. The exception is when the nearest whole number of layers is already within 0.01°.
   - You choose which face rides the 45° fence: the good wood's outer face, the good wood's inner face (with the L upside down), or the cheap wood's inner edge. For the long point to end up on the outside of the frame, the outer face has to go on the operator side of the fence and either inner face on the blade side. The diagram in the cut list shows the setup.
-  - With the **outer** face on the fence, tape at the FAR point makes the miter smaller than 45°, and tape NEAR the blade makes it larger.
+  - With the **outer** face on the fence, tape at the FAR point makes the mitre smaller than 45°, and tape NEAR the blade makes it larger.
   - With either **inner** face on the fence it's the other way round.
 
 ## Data

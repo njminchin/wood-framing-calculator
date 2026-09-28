@@ -103,7 +103,7 @@ export function buildDrawing(frame, meta, settings) {
   // ---------- Title block ----------
   s.rect(M, y, SHEET_W - 2 * M, 70, 'box');
   s.text(M + 14, y + 30, 'FLOATING FRAME - CUTTING DRAWING', { size: 20, weight: 'bold' });
-  s.text(M + 14, y + 54, 'All dimensions in mm. Miter angles are measured between the strip\'s long (outer) edge and the cut.', { size: 11, cls: 'muted' });
+  s.text(M + 14, y + 54, 'All dimensions in mm. Mitre angles are measured between the strip\'s long (outer) edge and the cut.', { size: 11, cls: 'muted' });
   const tbx = SHEET_W - M - 360;
   s.line(tbx, y, tbx, y + 70, 'thin');
   const rows = [
@@ -261,9 +261,9 @@ export function buildDrawing(frame, meta, settings) {
       s.dim([rightmost, outerR[1]], [rightmost, innerR[1]], -12, f1(part.width), { size: 9.5 });
 
       const cL = corners[j], cR = corners[i];
-      s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] - 4, `${f2(cL.miter)}°`, { size: 11, anchor: 'end', cls: 'angle' });
+      s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] - 4, `${f2(cL.mitre)}°`, { size: 11, anchor: 'end', cls: 'angle' });
       s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] + 9, `${cL.key} end`, { size: 9, anchor: 'end', cls: 'muted' });
-      s.text(rightmost + 56, outerR[1] - 4, `${f2(cR.miter)}°`, { size: 11, cls: 'angle' });
+      s.text(rightmost + 56, outerR[1] - 4, `${f2(cR.mitre)}°`, { size: 11, cls: 'angle' });
       s.text(rightmost + 56, outerR[1] + 9, `${cR.key} end`, { size: 9, cls: 'muted' });
 
       // Label column
