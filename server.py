@@ -6,8 +6,12 @@ Zero third-party dependencies. Data is stored in ./data/db.json and
 uploaded painting images in ./data/images/ (next to this script, or next to
 the packaged .pyz / .exe). Set FRAME_DATA to use a different folder.
 
-Environment: FRAME_HOST (default 127.0.0.1, use 0.0.0.0 to allow other
-devices on the network), FRAME_PORT (default 8765), FRAME_DATA.
+By default other devices on your network can connect too (e.g. a phone or
+tablet in the workshop). Use --local-only (or FRAME_HOST=127.0.0.1) to allow
+only this computer.
+
+Environment: FRAME_HOST (default 0.0.0.0 = all network interfaces),
+FRAME_PORT (default 8765), FRAME_DATA.
 """
 
 import json
@@ -40,7 +44,7 @@ DATA_DIR = os.path.abspath(os.environ.get("FRAME_DATA") or os.path.join(APP_DIR,
 IMAGE_DIR = os.path.join(DATA_DIR, "images")
 DB_PATH = os.path.join(DATA_DIR, "db.json")
 
-HOST = os.environ.get("FRAME_HOST", "127.0.0.1")
+HOST = "127.0.0.1" if "--local-only" in sys.argv else os.environ.get("FRAME_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FRAME_PORT", "8765"))
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
@@ -335,6 +339,10 @@ def main():
         lan_ip = _lan_ip()
         if lan_ip:
             print(f"Other devices on your network: http://{lan_ip}:{PORT}/")
+            if os.name == "nt":
+                print("(If they can't connect, allow the app through Windows Firewall on Private networks.)")
+    elif HOST in ("127.0.0.1", "localhost"):
+        print("Only this computer can connect (local-only mode).")
     print("Data folder:", DATA_DIR)
     print("Press Ctrl+C to stop.")
     if "--no-browser" not in sys.argv:

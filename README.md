@@ -11,7 +11,15 @@ Requires Python 3.9+ (no packages to install).
 
 Your browser opens at <http://127.0.0.1:8765>. Stop the app with Ctrl+C in the console window.
 
-Options: `python server.py --no-browser`, or set the environment variables `FRAME_PORT` / `FRAME_HOST`. Setting `FRAME_HOST=0.0.0.0` lets other devices on your network open it, e.g. a tablet in the workshop.
+### Opening it from other devices
+
+Other devices on your network (a phone, a tablet in the workshop, another PC) can connect too. The console shows the address to use, e.g. `Other devices on your network: http://192.168.1.20:8765/`.
+
+- **Windows Firewall:** the first time you run it, Windows asks whether to allow Python (or `FloatingFrame.exe`) on the network. Tick **Private networks** and allow it. If you dismissed the prompt, allow it under *Windows Security → Firewall & network protection → Allow an app through firewall*.
+- There are no logins. Anyone on your network who opens the address can view and edit your saved paintings, so only use it on a network you trust.
+- To allow only this computer, run `python server.py --local-only`.
+
+Other options: `--no-browser` (don't open a browser), and the environment variables `FRAME_PORT`, `FRAME_HOST` and `FRAME_DATA` (data folder).
 
 ## Packaging
 
