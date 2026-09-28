@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Floating Frame Calculator</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' fill='%235b3a24'/%3E%3Crect x='8' y='8' width='16' height='16' fill='%23d9785a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="1" fill="var(--wood)"/><rect x="8" y="8" width="16" height="16" fill="var(--accent)"/></svg>
+      <span>Floating Frame Calculator</span>
+    </div>
+    <div class="quickload">
+      <input id="quickLoad" list="dlPaintings" placeholder="Load a saved painting - search SKU, title or artist…" autocomplete="off">
+      <button id="btnLibrary" type="button">Library</button>
+    </div>
+    <div class="actions">
+      <span id="saveStatus" class="save-status"></span>
+      <button id="btnNew" type="button">New</button>
+      <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="form">
+      <section class="card">
+        <h2>Painting</h2>
+        <div class="field">
+          <label for="f-sku">SKU</label>
+          <input id="f-sku" data-p="sku" list="dlSkus" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-title">Title</label>
+          <input id="f-title" data-p="title" list="dlTitles" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-artist">Artist</label>
+          <input id="f-artist" data-p="artist" list="dlArtists" autocomplete="off" placeholder="Type or pick from list">
+        </div>
+        <div id="matchHint" class="hint" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>Painting size <span class="unit">mm</span></h2>
+        <div class="measure-wrap">
+          <svg class="measure-diagram" viewBox="0 0 120 100" aria-hidden="true">
+            <polygon points="22,20 100,18 102,84 20,82" fill="var(--canvas-fill)" stroke="currentColor" stroke-width="1.5"/>
+            <text x="61" y="12" text-anchor="middle">Top</text>
+            <text x="61" y="97" text-anchor="middle">Bottom</text>
+            <text x="12" y="52" text-anchor="middle" transform="rotate(-90 12 52)">Left</text>
+            <text x="110" y="52" text-anchor="middle" transform="rotate(90 110 52)">Right</text>
+            <line x1="20" y1="82" x2="100" y2="18" stroke="currentColor" stroke-dasharray="3 2" opacity=".45"/>
+            <line x1="22" y1="20" x2="102" y2="84" stroke="currentColor" stroke-dasharray="3 2" opacity=".45"/>
+          </svg>
+          <div class="measure-fields">
+            <div class="field">
+              <label for="f-top">Top width</label>
+              <input id="f-top" data-p="topWidth" type="number" step="0.1" min="0" inputmode="decimal">
+            </div>
+            <div class="field">
+              <label for="f-bottom">Bottom width</label>
+              <input id="f-bottom" data-p="bottomWidth" type="number" step="0.1" min="0" inputmode="decimal">
+              <label class="check"><input type="checkbox" data-p="sameWidth"> same as top</label>
+            </div>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="f-left">Left height</label>
+            <input id="f-left" data-p="leftHeight" type="number" step="0.1" min="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="f-right">Right height</label>
+            <input id="f-right" data-p="rightHeight" type="number" step="0.1" min="0" inputmode="decimal">
+            <label class="check"><input type="checkbox" data-p="sameHeight"> same as left</label>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="f-depth">Canvas depth</label>
+            <input id="f-depth" data-p="depth" type="number" step="0.1" min="0" inputmode="decimal">
+          </div>
+        </div>
+        <details class="more">
+          <summary>Diagonals (optional, improves corner angles)</summary>
+          <p class="help">Four sides alone don't fix a canvas's shape - it can rack. Without diagonals the most-square shape is assumed. Measure corner to corner (dashed lines above).</p>
+          <div class="row2">
+            <div class="field">
+              <label for="f-diagA">Bottom-left → top-right</label>
+              <input id="f-diagA" data-p="diagA" type="number" step="0.1" min="0" inputmode="decimal">
+            </div>
+            <div class="field">
+              <label for="f-diagB">Top-left → bottom-right</label>
+              <input id="f-diagB" data-p="diagB" type="number" step="0.1" min="0" inputmode="decimal">
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Painting image</h2>
+        <div class="image-row">
+          <div id="imgThumb" class="thumb"><span>Default image</span></div>
+          <div class="image-actions">
+            <label class="button file-button">Upload image…<input id="imgFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>
+            <button id="imgRemove" type="button" class="link" hidden>Remove image</button>
+            <p id="imgNote" class="help"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Frame settings <span class="unit">mm</span></h2>
+        <p class="help">Saved with each painting. "Save as defaults" makes them the starting point for new paintings.</p>
+        <div class="row2">
+          <div class="field">
+            <label for="s-tg">Good wood thickness</label>
+            <input id="s-tg" data-s="goodThickness" type="number" step="0.1" min="0">
+          </div>
+          <div class="field">
+            <label for="s-species">Good wood (3D look)</label>
+            <select id="s-species" data-s="species"></select>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="s-tc">Cheap wood thickness</label>
+            <input id="s-tc" data-s="cheapThickness" type="number" step="0.1" min="0">
+          </div>
+          <div class="field">
+            <label for="s-wc">Cheap wood width</label>
+            <input id="s-wc" data-s="cheapWidth" type="number" step="0.1" min="0">
+          </div>
+        </div>
+        <div class="field">
+          <label for="s-pos">Cheap strip attaches</label>
+          <select id="s-pos" data-s="cheapPosition">
+            <option value="inside">Against the inside face of the good wood</option>
+            <option value="under">Underneath the good wood (outer edges flush)</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="s-gap">Gap to painting</label>
+            <input id="s-gap" data-s="gap" type="number" step="0.1" min="0">
+          </div>
+          <div class="field">
+            <label for="s-lip">Lip</label>
+            <input id="s-lip" data-s="lip" type="number" step="0.1">
+          </div>
+        </div>
+        <p class="help">Lip = how far the frame stands proud of the painting's face. Negative recesses it.</p>
+        <div class="button-row">
+          <button id="btnSaveDefaults" type="button">Save as defaults</button>
+          <button id="btnResetDefaults" type="button" class="link">Reset to defaults</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Cutting setup</h2>
+        <div class="row2">
+          <div class="field">
+            <label for="s-td">Far tape point from blade <span class="unit">mm</span></label>
+            <input id="s-td" data-s="tapeDistance" type="number" step="1" min="1">
+          </div>
+          <div class="field">
+            <label for="s-tt">Tape thickness / layer <span class="unit">mm</span></label>
+            <input id="s-tt" data-s="tapeThickness" type="number" step="0.01" min="0.01">
+          </div>
+        </div>
+        <div class="field">
+          <label for="s-fence">Against the 45° fence</label>
+          <select id="s-fence" data-s="fenceEdge">
+            <option value="outer">Good wood - outer face</option>
+            <option value="goodInner">Good wood - inner face (L upside down)</option>
+            <option value="inner">Cheap wood - inner edge</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="s-kerf">Saw kerf <span class="unit">mm</span></label>
+            <input id="s-kerf" data-s="kerf" type="number" step="0.1" min="0">
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="cut" class="active">Cut list</button>
+        <button role="tab" data-tab="model">3D model</button>
+        <button role="tab" data-tab="drawing">Technical drawing</button>
+      </nav>
+
+      <section id="panel-cut" class="panel" data-panel="cut"></section>
+
+      <section id="panel-model" class="panel" data-panel="model" hidden>
+        <div class="toolbar">
+          <label class="check"><input type="checkbox" id="optCanvas" checked> Show painting</label>
+          <label class="check"><input type="checkbox" id="optMeasure" checked> Show measurements</label>
+          <label class="check"><input type="checkbox" id="optBlackTop"> Paint top of cheap wood black</label>
+          <label class="check"><input type="checkbox" id="optExplode"> Exploded</label>
+          <span class="spacer"></span>
+          <div class="seg">
+            <button type="button" data-view="front">Front</button>
+            <button type="button" data-view="iso">3/4</button>
+            <button type="button" data-view="corner">Corner</button>
+            <button type="button" data-view="back">Back</button>
+          </div>
+          <button type="button" id="btnSnapshot">Save PNG</button>
+        </div>
+        <div id="viewer" class="viewer">
+          <div id="viewerMsg" class="viewer-msg" hidden></div>
+        </div>
+        <p class="help center">Drag to rotate · right-drag or shift-drag to pan · scroll to zoom</p>
+      </section>
+
+      <section id="panel-drawing" class="panel" data-panel="drawing" hidden>
+        <div class="toolbar">
+          <span class="help">Drawing of the frame, the L profile and all 8 strips.</span>
+          <span class="spacer"></span>
+          <button type="button" id="btnPrintDrawing">Print</button>
+          <button type="button" id="btnDownloadSvg">Download SVG</button>
+        </div>
+        <div id="drawingHost" class="drawing-host"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="libraryDialog" class="dialog">
+    <div class="dialog-head">
+      <h2>Library</h2>
+      <div class="seg" id="libTabs">
+        <button type="button" data-lib="paintings" class="active">Paintings</button>
+        <button type="button" data-lib="artists">Artists</button>
+      </div>
+      <button type="button" class="link" id="libClose">Close</button>
+    </div>
+    <div data-libpanel="paintings">
+      <input id="libSearch" type="search" placeholder="Filter by SKU, title or artist…">
+      <div class="table-wrap"><table class="table" id="libTable"></table></div>
+    </div>
+    <div data-libpanel="artists" hidden>
+      <form id="artistForm" class="inline-form">
+        <input id="artistName" placeholder="Add an artist name">
+        <button type="submit">Add</button>
+      </form>
+      <div class="table-wrap"><table class="table" id="artistTable"></table></div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <datalist id="dlPaintings"></datalist>
+  <datalist id="dlSkus"></datalist>
+  <datalist id="dlTitles"></datalist>
+  <datalist id="dlArtists"></datalist>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

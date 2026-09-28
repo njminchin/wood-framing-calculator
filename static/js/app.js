@@ -1,0 +1,776 @@
+import { computeFrame, FENCE_FACES, onInnerSide } from './geometry.js';
+import { buildDrawing } from './drawing.js';
+import { SPECIES } from './textures.js';
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const f1 = (v) => (Number.isFinite(v) ? v.toFixed(1) : '-');
+const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '-');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const norm = (s) => String(s ?? '').trim().toLowerCase();
+
+const DRAFT_KEY = 'floating-frame:draft';
+const UI_KEY = 'floating-frame:ui';
+
+const PAINTING_TEXT = ['sku', 'title', 'artist'];
+const PAINTING_NUM = ['topWidth', 'bottomWidth', 'leftHeight', 'rightHeight', 'depth', 'diagA', 'diagB'];
+const PAINTING_BOOL = ['sameWidth', 'sameHeight'];
+const SETTING_NUM = ['goodThickness', 'cheapThickness', 'cheapWidth', 'gap', 'lip', 'tapeDistance', 'tapeThickness', 'kerf'];
+
+// ---------------------------------------------------------------- API
+const api = {
+  async req(method, url, body, headers = {}) {
+    const opts = { method, headers };
+    if (body instanceof Blob) { opts.body = body; opts.headers['Content-Type'] = body.type; }
+    else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
+    const r = await fetch(url, opts);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
+    return data;
+  },
+  state: () => api.req('GET', '/api/state'),
+  saveSettings: (s) => api.req('PUT', '/api/settings', s),
+  savePainting: (p) => api.req('POST', '/api/paintings', p),
+  deletePainting: (id) => api.req('DELETE', `/api/paintings/${id}`),
+  uploadImage: (id, blob) => api.req('POST', `/api/paintings/${id}/image`, blob),
+  deleteImage: (id) => api.req('DELETE', `/api/paintings/${id}/image`),
+  addArtist: (name) => api.req('POST', '/api/artists', { name }),
+  deleteArtist: (name) => api.req('DELETE', `/api/artists/${encodeURIComponent(name)}`),
+};
+
+// ---------------------------------------------------------------- State
+let db = { settings: {}, paintings: [], artists: [] };
+let cur = null; // the painting being edited
+let savedSnapshot = null; // JSON of `cur` as last saved/loaded, for dirty tracking
+let frame = null;
+let viewer = null;
+let activeTab = 'cut';
+let drawingDirty = true, modelDirty = true;
+
+function blankPainting() {
+  return {
+    id: null, sku: '', title: '', artist: '',
+    topWidth: null, bottomWidth: null, sameWidth: true,
+    leftHeight: null, rightHeight: null, sameHeight: true,
+    depth: null, diagA: null, diagB: null,
+    image: null, // saved image filename on the server
+    pendingImage: null, // data URL of a newly chosen image (uploaded on save)
+    removeImage: false,
+    settings: { ...db.settings },
+  };
+}
+
+function fromRecord(rec) {
+  const p = blankPainting();
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt']) if (k in rec) p[k] = rec[k];
+  p.settings = { ...db.settings, ...(rec.settings || {}) };
+  return p;
+}
+
+function toRecord(p) {
+  const r = { id: p.id || undefined, settings: p.settings };
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL]) r[k] = p[k];
+  return r;
+}
+
+const snapshotOf = (p) => JSON.stringify({ ...toRecord(p), pendingImage: !!p.pendingImage, removeImage: p.removeImage });
+const isDirty = () => cur && snapshotOf(cur) !== savedSnapshot;
+
+// ---------------------------------------------------------------- Form binding
+function writeForm() {
+  for (const el of $$('[data-p]')) {
+    const k = el.dataset.p;
+    if (el.type === 'checkbox') el.checked = !!cur[k];
+    else el.value = cur[k] ?? '';
+  }
+  for (const el of $$('[data-s]')) el.value = cur.settings[el.dataset.s] ?? '';
+  syncSameFields();
+}
+
+function readField(el) {
+  const k = el.dataset.p ?? el.dataset.s;
+  const target = el.dataset.p ? cur : cur.settings;
+  if (el.type === 'checkbox') target[k] = el.checked;
+  else if (el.type === 'number') target[k] = el.value === '' ? null : parseFloat(el.value);
+  else target[k] = el.value;
+}
+
+function syncSameFields() {
+  const b = $('#f-bottom'), r = $('#f-right');
+  b.disabled = !!cur.sameWidth;
+  r.disabled = !!cur.sameHeight;
+  if (cur.sameWidth) b.value = cur.topWidth ?? '';
+  if (cur.sameHeight) r.value = cur.leftHeight ?? '';
+}
+
+function paintingInput() {
+  const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
+  return {
+    top: n(cur.topWidth),
+    bottom: n(cur.sameWidth ? cur.topWidth : cur.bottomWidth),
+    left: n(cur.leftHeight),
+    right: n(cur.sameHeight ? cur.leftHeight : cur.rightHeight),
+    depth: n(cur.depth),
+    diagA: n(cur.diagA) > 0 ? cur.diagA : 0,
+    diagB: n(cur.diagB) > 0 ? cur.diagB : 0,
+  };
+}
+
+function settingsInput() {
+  const s = { ...cur.settings };
+  for (const k of SETTING_NUM) s[k] = typeof s[k] === 'number' ? s[k] : parseFloat(s[k]);
+  return s;
+}
+
+// ---------------------------------------------------------------- Recompute & render
+function recompute() {
+  frame = computeFrame(paintingInput(), settingsInput());
+  renderCutList();
+  modelDirty = drawingDirty = true;
+  refreshVisiblePanel();
+  updateStatus();
+  saveDraft();
+  updateMatchHint();
+}
+
+function refreshVisiblePanel() {
+  if (activeTab === 'model' && modelDirty) { renderModel(); modelDirty = false; }
+  if (activeTab === 'drawing' && drawingDirty) { renderDrawing(); drawingDirty = false; }
+}
+
+function tapeCell(t) {
+  if (t.invalid) return '<span class="tag none">check cutting setup</span>';
+  if (t.layers === 0) return '<span class="tag none">no tape</span>';
+  return `<span class="tag ${t.location}">${t.location === 'far' ? 'FAR end' : 'NEAR blade'}</span> <b>${t.layers}</b> layer${t.layers === 1 ? '' : 's'} <span class="sub">(${f2(t.shim)} mm)</span>`;
+}
+
+function renderCutList() {
+  const host = $('#panel-cut');
+  const p = paintingInput();
+  const missing = ['top', 'left', 'depth'].some((k) => !(p[k] > 0));
+  if (missing && frame.errors.every((e) => /required/.test(e))) {
+    host.innerHTML = `<div class="empty"><p><b>Enter the painting's measurements</b> on the left to get the cut list.</p><p>Top width, left height and canvas depth are the minimum (bottom and right default to the same).</p></div>`;
+    return;
+  }
+  const alerts = [
+    ...frame.errors.map((e) => `<div class="alert err">${esc(e)}</div>`),
+    ...frame.warnings.map((w) => `<div class="alert warn">${esc(w)}</div>`),
+  ].join('');
+  if (!frame.ok) { host.innerHTML = `<div class="alerts">${alerts}</div>`; return; }
+
+  const s = settingsInput();
+  const q = frame.quad;
+  const stripsRows = frame.strips.map((st) => {
+    const [i, j] = st.corners;
+    const cA = frame.corners[j], cB = frame.corners[i];
+    return `<tr>
+      <td><b>${st.name}</b><div class="sub">painting ${f1(st.paintingLength)}</div></td>
+      <td class="num big">${f1(st.good.longPoint)}</td>
+      <td class="num">${f1(st.good.shortPoint)}</td>
+      <td class="num">${f1(st.cheap.longPoint)}</td>
+      <td class="num">${f1(st.cheap.shortPoint)}</td>
+      <td><span class="angle">${f2(cA.miter)}°</span> <span class="sub">${cA.key}</span> &nbsp;·&nbsp; <span class="angle">${f2(cB.miter)}°</span> <span class="sub">${cB.key}</span></td>
+    </tr>`;
+  }).join('');
+
+  const cornerRows = frame.corners.map((c) => `<tr>
+      <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
+      <td class="num">${f2(c.angle)}°</td>
+      <td class="num angle">${f2(c.miter)}°</td>
+      <td>${tapeCell(c.tape)}</td>
+      <td class="num">${f2(c.tape.result)}°</td>
+      <td class="num">${Math.abs(c.tape.error) < 0.005 ? '0.00' : (c.tape.error > 0 ? '+' : '') + f2(c.tape.error)}°</td>
+      <td class="num">${c.jointOpening < 0.05 ? '<span class="sub">&lt; 0.05</span>' : f2(c.jointOpening)} <span class="sub">${c.jointOpening < 0.05 ? '' : c.openingAt === 'inner' ? 'inside' : 'outside'}</span></td>
+    </tr>`).join('');
+
+  const perLayer = (Math.atan(s.tapeThickness / s.tapeDistance) * 180) / Math.PI;
+  const face = FENCE_FACES[s.fenceEdge] || FENCE_FACES.outer;
+  const outerFence = !onInnerSide(s.fenceEdge);
+  const farEffect = outerFence ? 'smaller (more acute)' : 'larger';
+  const nearEffect = outerFence ? 'larger' : 'smaller (more acute)';
+
+  host.innerHTML = `
+    ${alerts ? `<div class="alerts">${alerts}</div>` : ''}
+    <div class="stats">
+      <div class="stat"><div class="k">Outer frame size</div><div class="v">${f1(frame.outerSize.top)} × ${f1(frame.outerSize.left)}</div><div class="s">top × left, outside edges</div></div>
+      <div class="stat"><div class="k">Good wood stock</div><div class="v">${f1(s.goodThickness)} × ${f1(frame.goodWidth)}</div><div class="s">thickness × width · need ≥ ${f1(frame.stock.good)} long</div></div>
+      <div class="stat"><div class="k">Cheap wood stock</div><div class="v">${f1(s.cheapThickness)} × ${f1(s.cheapWidth)}</div><div class="s">thickness × width · need ≥ ${f1(frame.stock.cheap)} long</div></div>
+      <div class="stat"><div class="k">Canvas support</div><div class="v">${f1(frame.support)}</div><div class="s">cheap strip reaches under the canvas</div></div>
+    </div>
+
+    <h3>Cut list - 4 L assemblies</h3>
+    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then miter both ends of the L in one cut. Long point = outer (visible) edge of the good wood.</p>
+    <div class="table-wrap"><table class="table">
+      <thead>
+        <tr class="group-head"><th></th><th colspan="2" class="num">Good wood</th><th colspan="2" class="num">Cheap wood</th><th></th></tr>
+        <tr><th>Side</th><th class="num">Long point</th><th class="num">Short point</th><th class="num">Outer edge</th><th class="num">Inner edge</th><th>Miter at each end</th></tr>
+      </thead>
+      <tbody>${stripsRows}</tbody>
+    </table></div>
+
+    <h3>Corners &amp; tape shims</h3>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Miter (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
+      <tbody>${cornerRows}</tbody>
+    </table></div>
+    <p class="note">Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.</p>
+
+    <h3>Using the tape shims</h3>
+    <div class="guide">
+      ${tapeGuideSvg(s)}
+      <div>
+        <div class="guide-label">Against the 45° fence:</div>
+        <div class="seg guide-toggle" role="group" aria-label="Face against the fence">
+          ${Object.entries(FENCE_FACES).map(([k, f]) => `<button type="button" data-fence-edge="${k}" class="${k === s.fenceEdge ? 'active' : ''}">${f.short}</button>`).join('')}
+        </div>
+        <div>The strip goes on the <b>${face.side} side</b> of the fence so the long point ends up on the outside of the frame${
+          s.fenceEdge === 'goodInner' ? '. Lay the L <b>upside down</b>: the good wood\'s front edge on the sled, the cheap wood on top reaching over the fence.' : '.'}</div>
+        <ul>
+          <li><span class="tag far">FAR end</span> tape on the fence ~${f1(s.tapeDistance)} mm from the blade makes the miter <b>${farEffect}</b> than 45°.</li>
+          <li><span class="tag near">NEAR blade</span> tape on the fence right next to the blade makes it <b>${nearEffect}</b> than 45°.</li>
+          <li>Stack the layers at one point only - the strip should still touch the bare fence (or its tape) at both points.</li>
+        </ul>
+        <p class="note">Painting shape ${q.method === 'diagonals' ? `fitted to your diagonal${p.diagA && p.diagB ? 's' : ''} (off by ${f1(q.diagResidual)} mm)` : 'assumed "most square". Measure its diagonals to check'}: BL→TR <b>${f1(q.diagA)}</b>, TL→BR <b>${f1(q.diagB)}</b>.</p>
+      </div>
+    </div>`;
+}
+
+// Bird's-eye view of the 45° sled: blade at the top, the fence running away from
+// the kerf down to the right, and the L strip against one side of it.
+function tapeGuideSvg(s) {
+  const c = Math.SQRT1_2;
+  const K = 150, AY = 112; // kerf x, and where the fence's blade-side face meets the kerf
+  // P(a, o): a along the fence away from the blade, o off the fence's blade-side
+  // face (+ towards the blade, - towards the operator).
+  const P = (a, o) => [K + c * a + c * o, AY + c * a - c * o];
+  const pts = (arr) => arr.map((q) => q.map((v) => v.toFixed(1)).join(',')).join(' ');
+  const rot = (q) => `rotate(45 ${q[0].toFixed(1)} ${q[1].toFixed(1)})`;
+  const FT = 12, GOOD = 14, CHEAP = 22, LEN = 190;
+  const inside = s.cheapPosition !== 'under';
+  const bladeSide = onInnerSide(s.fenceEdge);
+
+  // Profile across the strip, measured outwards from the good wood's inner face.
+  const prof = {
+    good: [0, GOOD],
+    cheap: inside ? [-CHEAP, 0] : [GOOD - CHEAP, GOOD],
+  };
+  const contact = { outer: GOOD, goodInner: 0, inner: prof.cheap[0] }[s.fenceEdge] ?? GOOD;
+  // Blade side: outwards = towards the blade (+o), contact face on o = 0.
+  // Operator side: outwards = towards the fence, contact face on o = -FT.
+  const toO = (d) => (bladeSide ? d - contact : -FT + (d - contact));
+  const upsideDown = s.fenceEdge === 'goodInner';
+  const bands = ['cheap', 'good'].map((k) => {
+    const [o1, o2] = prof[k].map(toO);
+    const over = upsideDown && k === 'cheap'; // sits on top, reaching over the fence
+    return { k, oa: Math.min(o1, o2), ob: Math.max(o1, o2), over, label: over ? 'cheap wood (on top)' : k === 'good' ? 'good wood' : 'cheap wood' };
+  });
+  const oMin = Math.min(...bands.map((b) => b.oa)), oMax = Math.max(...bands.map((b) => b.ob));
+
+  // Kept piece is right of the kerf (x >= K), i.e. a >= -o.
+  const band = (b) => [P(-b.oa, b.oa), P(LEN, b.oa), P(LEN, b.ob), P(-b.ob, b.ob)];
+  const s0 = Math.min(-oMin, -oMax) - 18;
+  const offcut = [P(s0, oMin), P(-oMin, oMin), P(-oMax, oMax), P(s0, oMax)];
+  const oLong = toO(GOOD); // good wood's outer face = long point
+  const tip = P(-oLong, oLong);
+  const o0 = bladeSide ? 0 : -FT, dir = bladeSide ? 1 : -1;
+  const face = o0 + dir * 1.5;
+  const near = P(-o0 + 14, face), far = P(175, face);
+  const lblO = bladeSide ? Math.min(oMin, -FT) - 12 : Math.max(oMax, 0) + 12; // free side of the fence
+  const nearL = P(-o0 + (bladeSide ? 44 : 30), lblO), farL = P(bladeSide ? 190 : 112, lblO);
+  const lblAnchor = bladeSide ? 'end' : 'start'; // keep labels clear of the fence
+  const fence = [P(0, 0), P(235, 0), P(235, -FT), P(FT, -FT)];
+  const fenceL = P(upsideDown ? 150 : 105, -FT / 2);
+  const bandLabel = (b) => {
+    const q = P(b.over ? 60 : 75, (b.oa + b.ob) / 2);
+    return `<text class="g-band-t" x="${q[0]}" y="${q[1]}" text-anchor="middle" dominant-baseline="middle" transform="${rot(q)}">${b.label}</text>`;
+  };
+  return `<svg viewBox="0 0 330 300" role="img" aria-label="Sled seen from above: blade, 45 degree fence and strip">
+    <defs><clipPath id="sledClip"><rect x="6" y="46" width="318" height="248" rx="6"/></clipPath>
+      <marker id="gArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" class="g-arrowhead"/></marker></defs>
+    <rect class="g-sled" x="6" y="46" width="318" height="248" rx="6"/>
+    <line class="g-kerf" x1="${K}" y1="46" x2="${K}" y2="294"/>
+    <g clip-path="url(#sledClip)">
+      <polygon class="g-offcut" points="${pts(offcut)}"/>
+      <polygon class="g-fence" points="${pts(fence)}"/>
+      ${bands.map((b) => `<polygon class="g-${b.k}${b.over ? ' g-over' : ''}" points="${pts(band(b))}"/>`).join('')}
+    </g>
+    ${bands.map(bandLabel).join('')}
+    <text class="g-fence-t" x="${fenceL[0]}" y="${fenceL[1]}" text-anchor="middle" dominant-baseline="middle" transform="${rot(fenceL)}">45° fence</text>
+    <rect class="g-blade" x="${K - 2.5}" y="6" width="5" height="36" rx="1"/>
+    <text class="g-blade-t" x="${K + 8}" y="24">blade</text>
+    <circle class="g-tip" cx="${tip[0]}" cy="${tip[1]}" r="3.5"/>
+    <text class="g-ink" x="${K - 7}" y="${tip[1] + 4}" text-anchor="end">long point</text>
+    <circle class="g-near" cx="${near[0]}" cy="${near[1]}" r="5.5"/>
+    <text class="g-near-t" x="${nearL[0]}" y="${nearL[1] + 4}" text-anchor="${lblAnchor}">NEAR</text>
+    <circle class="g-far" cx="${far[0]}" cy="${far[1]}" r="5.5"/>
+    <text class="g-far-t" x="${farL[0]}" y="${farL[1] + 4}" text-anchor="${lblAnchor}">FAR · ${f1(s.tapeDistance)} mm</text>
+    <line class="g-arrow" x1="28" y1="270" x2="28" y2="215" marker-end="url(#gArrow)"/>
+    <text class="g-muted" x="28" y="284" text-anchor="middle">feed</text>
+  </svg>`;
+}
+
+// ---------------------------------------------------------------- 3D
+async function ensureViewer() {
+  if (viewer) return viewer;
+  try {
+    const { FrameViewer } = await import('./viewer3d.js');
+    viewer = new FrameViewer($('#viewer'));
+    viewer.setOptions({ showCanvas: $('#optCanvas').checked, showMeasurements: $('#optMeasure').checked, explode: $('#optExplode').checked, blackCheapTop: $('#optBlackTop').checked });
+  } catch (e) {
+    console.error(e);
+    showViewerMsg('3D view could not start: ' + e.message);
+  }
+  return viewer;
+}
+
+function showViewerMsg(msg) {
+  const el = $('#viewerMsg');
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+function currentImageUrl() {
+  if (cur.pendingImage) return cur.pendingImage;
+  if (cur.image && !cur.removeImage) return `/images/${cur.image}?v=${cur.updatedAt || ''}`;
+  return null;
+}
+
+async function renderModel() {
+  const v = await ensureViewer();
+  if (!v) return;
+  v.setSpecies(cur.settings.species);
+  v.setImage(currentImageUrl());
+  v.update(frame);
+  showViewerMsg(frame.ok ? '' : 'Enter valid measurements to see the frame.');
+}
+
+// ---------------------------------------------------------------- Drawing
+function renderDrawing() {
+  const host = $('#drawingHost');
+  if (!frame.ok) {
+    host.innerHTML = '<div class="empty">Enter valid measurements to see the drawing.</div>';
+    return;
+  }
+  host.innerHTML = buildDrawing(frame, cur, settingsInput());
+}
+
+function drawingFileName(ext) {
+  const base = [cur.sku, cur.title].filter(Boolean).join(' - ') || 'frame';
+  return `${base.replace(/[\\/:*?"<>|]+/g, '_')} - ${ext}`;
+}
+
+function download(name, blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// ---------------------------------------------------------------- Status / lists
+function settingsMatchDefaults() {
+  return Object.keys(db.settings).every((k) => String(cur.settings[k] ?? '') === String(db.settings[k] ?? ''));
+}
+
+function updateDefaultsButtons() {
+  const same = settingsMatchDefaults();
+  const reset = $('#btnResetDefaults'), save = $('#btnSaveDefaults');
+  reset.disabled = save.disabled = same;
+  reset.title = same ? 'These are already the default settings' : '';
+  save.title = same ? 'These are already the default settings' : '';
+}
+
+function updateStatus() {
+  updateDefaultsButtons();
+  const el = $('#saveStatus');
+  if (!cur.id) { el.textContent = 'New - not saved yet'; el.className = 'save-status dirty'; }
+  else if (isDirty()) { el.textContent = 'Unsaved changes'; el.className = 'save-status dirty'; }
+  else { el.textContent = 'Saved'; el.className = 'save-status saved'; }
+}
+
+const paintingLabel = (p) => [p.sku, p.title, p.artist].filter(Boolean).join(' — ');
+
+function refreshLists() {
+  const opt = (v) => `<option value="${esc(v)}"></option>`;
+  const sorted = [...db.paintings].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  $('#dlPaintings').innerHTML = sorted.map((p) => opt(paintingLabel(p))).join('');
+  $('#dlSkus').innerHTML = [...new Set(sorted.map((p) => p.sku).filter(Boolean))].map(opt).join('');
+  $('#dlTitles').innerHTML = [...new Set(sorted.map((p) => p.title).filter(Boolean))].map(opt).join('');
+  $('#dlArtists').innerHTML = db.artists.map(opt).join('');
+  if ($('#libraryDialog').open) { renderLibrary(); renderArtists(); }
+}
+
+function findSaved({ sku, title }) {
+  if (sku) {
+    const m = db.paintings.find((p) => norm(p.sku) === norm(sku));
+    if (m) return m;
+  }
+  if (title) return db.paintings.find((p) => norm(p.title) === norm(title));
+  return null;
+}
+
+function updateMatchHint() {
+  const hint = $('#matchHint');
+  const m = findSaved(cur);
+  if (!m || m.id === cur.id) { hint.hidden = true; return; }
+  hint.hidden = false;
+  hint.innerHTML = `<span>“${esc(paintingLabel(m))}” is already saved.</span><button type="button" class="link">Load it</button>`;
+  hint.querySelector('button').onclick = () => loadPainting(m.id);
+}
+
+// ---------------------------------------------------------------- Draft (browser cache of unsaved input)
+function saveDraft() {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ cur, savedSnapshot })); }
+  catch {
+    // Most likely the pending image is too big for localStorage; keep the rest.
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ cur: { ...cur, pendingImage: null }, savedSnapshot })); } catch { /* ignore */ }
+  }
+}
+
+function loadDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (d && d.cur) return d;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// ---------------------------------------------------------------- Actions
+function setCurrent(p, snapshot) {
+  cur = p;
+  cur.settings = { ...db.settings, ...(cur.settings || {}) };
+  savedSnapshot = snapshot ?? snapshotOf(cur);
+  writeForm();
+  updateImageUi();
+  recompute();
+}
+
+function confirmDiscard() {
+  return !isDirty() || confirm('You have unsaved changes to the current painting. Discard them?');
+}
+
+function loadPainting(id) {
+  const rec = db.paintings.find((p) => p.id === id);
+  if (!rec || !confirmDiscard()) return;
+  setCurrent(fromRecord(rec));
+  toast(`Loaded ${paintingLabel(rec) || 'painting'}`);
+}
+
+function newPainting() {
+  if (!confirmDiscard()) return;
+  setCurrent(blankPainting());
+  $('#f-sku').focus();
+}
+
+async function save() {
+  readAll();
+  if (!cur.sku.trim() && !cur.title.trim()) {
+    toast('Enter an SKU or a title before saving.', true);
+    $('#f-sku').focus();
+    return;
+  }
+  const clash = cur.sku.trim() && db.paintings.find((p) => norm(p.sku) === norm(cur.sku) && p.id !== cur.id);
+  if (clash) {
+    if (!cur.id) {
+      if (!confirm(`SKU "${cur.sku}" is already saved (${paintingLabel(clash)}). Overwrite it with these values?`)) return;
+      cur.id = clash.id;
+      cur.image = clash.image;
+    } else if (!confirm(`Another saved painting already uses SKU "${cur.sku}". Save anyway?`)) return;
+  }
+  const btn = $('#btnSave');
+  btn.disabled = true;
+  try {
+    let res = await api.savePainting(toRecord(cur));
+    cur.id = res.painting.id;
+    if (cur.pendingImage) {
+      const blob = await (await fetch(cur.pendingImage)).blob();
+      res = await api.uploadImage(cur.id, blob);
+    } else if (cur.removeImage && cur.image) {
+      res = await api.deleteImage(cur.id);
+      res.painting = res.paintings.find((p) => p.id === cur.id);
+    }
+    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    const saved = fromRecord(res.painting);
+    saved.settings = { ...cur.settings };
+    setCurrent(saved);
+    refreshLists();
+    toast('Saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function readAll() {
+  for (const el of $$('[data-p], [data-s]')) if (!el.disabled) readField(el);
+}
+
+async function deletePainting(id) {
+  const rec = db.paintings.find((p) => p.id === id);
+  if (!rec || !confirm(`Delete "${paintingLabel(rec)}" from the library? This can't be undone.`)) return;
+  try {
+    const res = await api.deletePainting(id);
+    db = res;
+    if (cur.id === id) { cur.id = null; cur.image = null; savedSnapshot = 'deleted'; updateStatus(); updateImageUi(); }
+    refreshLists();
+    toast('Deleted');
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- Image
+async function downscale(file, max = 2400) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that image')); i.src = url; });
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k);
+    c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.88);
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function updateImageUi() {
+  const url = currentImageUrl();
+  const t = $('#imgThumb');
+  t.style.backgroundImage = url ? `url("${url}")` : '';
+  t.classList.toggle('has-image', !!url);
+  $('#imgRemove').hidden = !url;
+  $('#imgNote').textContent = cur.pendingImage ? 'New image - saved with the painting.' : cur.removeImage ? 'Image will be removed on save.' : url ? '' : 'Shown on the 3D model.';
+  if (viewer) viewer.setImage(url);
+}
+
+// ---------------------------------------------------------------- Library dialog
+function renderLibrary() {
+  const q = norm($('#libSearch').value);
+  const rows = [...db.paintings]
+    .filter((p) => !q || [p.sku, p.title, p.artist].some((v) => norm(v).includes(q)))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const size = (p) => {
+    const w = p.sameWidth ? p.topWidth : `${f1(p.topWidth)}/${f1(p.bottomWidth)}`;
+    const h = p.sameHeight ? p.leftHeight : `${f1(p.leftHeight)}/${f1(p.rightHeight)}`;
+    return `${typeof w === 'number' ? f1(w) : w} × ${typeof h === 'number' ? f1(h) : h} × ${f1(p.depth)}`;
+  };
+  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Updated</th><th></th></tr></thead><tbody>${
+    rows.map((p) => `<tr class="clickable" data-id="${p.id}">
+      <td><b>${esc(p.sku || '-')}</b></td><td>${esc(p.title || '-')}</td><td>${esc(p.artist || '-')}</td>
+      <td class="sub">${size(p)}</td>
+      <td class="sub">${p.updatedAt ? new Date(p.updatedAt * 1000).toLocaleDateString() : ''}</td>
+      <td><button type="button" class="link danger" data-del="${p.id}">Delete</button></td></tr>`).join('')
+    || `<tr><td colspan="6" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
+  }</tbody>`;
+}
+
+function renderArtists() {
+  const counts = new Map();
+  for (const p of db.paintings) if (p.artist) counts.set(norm(p.artist), (counts.get(norm(p.artist)) || 0) + 1);
+  $('#artistTable').innerHTML = `<thead><tr><th>Artist</th><th class="num">Paintings</th><th></th></tr></thead><tbody>${
+    db.artists.map((a) => {
+      const n = counts.get(norm(a)) || 0;
+      return `<tr><td>${esc(a)}</td><td class="num">${n}</td><td>${n ? '<span class="sub">in use</span>' : `<button type="button" class="link danger" data-del-artist="${esc(a)}">Remove</button>`}</td></tr>`;
+    }).join('') || '<tr><td colspan="3" class="sub">No artists yet.</td></tr>'
+  }</tbody>`;
+}
+
+// ---------------------------------------------------------------- UI helpers
+let toastTimer;
+function toast(msg, err = false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast' + (err ? ' err' : '');
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, err ? 5000 : 2200);
+}
+
+function loadUi() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch { return {}; }
+}
+
+function saveUi(patch) {
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ ...loadUi(), ...patch })); } catch { /* ignore */ }
+}
+
+function setTab(tab) {
+  activeTab = tab;
+  for (const b of $$('.tabs button')) b.classList.toggle('active', b.dataset.tab === tab);
+  for (const p of $$('.panel')) p.hidden = p.dataset.panel !== tab;
+  saveUi({ tab });
+  if (tab === 'model' && viewer) viewer.resize();
+  refreshVisiblePanel();
+}
+
+// ---------------------------------------------------------------- Wire up
+function bindEvents() {
+  const form = $('#form');
+  form.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.dataset.p && !el.dataset.s) return;
+    readField(el);
+    if (el.dataset.p === 'sameWidth' || el.dataset.p === 'sameHeight' || el.dataset.p === 'topWidth' || el.dataset.p === 'leftHeight') {
+      // When un-ticking "same", start the other side from the current value.
+      if (el.dataset.p === 'sameWidth' && !el.checked && cur.bottomWidth == null) cur.bottomWidth = cur.topWidth;
+      if (el.dataset.p === 'sameHeight' && !el.checked && cur.rightHeight == null) cur.rightHeight = cur.leftHeight;
+      syncSameFields();
+      if (!cur.sameWidth) $('#f-bottom').value = cur.bottomWidth ?? '';
+      if (!cur.sameHeight) $('#f-right').value = cur.rightHeight ?? '';
+    }
+    if (el.dataset.s === 'species' && viewer) viewer.setSpecies(el.value);
+    recompute();
+  });
+
+  $('#quickLoad').addEventListener('change', (e) => {
+    const v = e.target.value.trim();
+    if (!v) return;
+    const rec = db.paintings.find((p) => paintingLabel(p) === v)
+      || db.paintings.find((p) => norm(p.sku) === norm(v) || norm(p.title) === norm(v));
+    if (rec) { loadPainting(rec.id); e.target.value = ''; }
+    else toast('No saved painting matches that.', true);
+  });
+
+  $('#btnNew').onclick = newPainting;
+  $('#btnSave').onclick = save;
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+  });
+
+  $('#btnSaveDefaults').onclick = async () => {
+    try {
+      const res = await api.saveSettings(cur.settings);
+      db.settings = res.settings;
+      updateDefaultsButtons();
+      toast('Saved as default frame settings');
+    } catch (e) { toast(e.message, true); }
+  };
+  $('#btnResetDefaults').onclick = () => {
+    cur.settings = { ...db.settings };
+    writeForm();
+    if (viewer) viewer.setSpecies(cur.settings.species);
+    recompute();
+    toast('Frame settings reset to defaults');
+  };
+
+  // Image
+  $('#imgFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      cur.pendingImage = await downscale(file);
+      cur.removeImage = false;
+      updateImageUi();
+      recompute();
+    } catch (err) { toast(err.message, true); }
+  });
+  $('#imgRemove').onclick = () => {
+    if (cur.pendingImage) cur.pendingImage = null;
+    else if (cur.image) cur.removeImage = true;
+    updateImageUi();
+    recompute();
+  };
+
+  // Tabs
+  for (const b of $$('.tabs button')) b.onclick = () => setTab(b.dataset.tab);
+  $('#panel-cut').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-fence-edge]');
+    if (!btn) return;
+    const sel = $('#s-fence');
+    sel.value = btn.dataset.fenceEdge;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // 3D options
+  $('#optCanvas').onchange = (e) => viewer && viewer.setOptions({ showCanvas: e.target.checked });
+  $('#optMeasure').onchange = (e) => viewer && viewer.setOptions({ showMeasurements: e.target.checked });
+  $('#optExplode').onchange = (e) => viewer && viewer.setOptions({ explode: e.target.checked });
+  $('#optBlackTop').onchange = (e) => {
+    saveUi({ blackCheapTop: e.target.checked });
+    if (viewer) viewer.setOptions({ blackCheapTop: e.target.checked });
+  };
+  for (const b of $$('[data-view]')) b.onclick = () => viewer && viewer.setView(b.dataset.view);
+  $('#btnSnapshot').onclick = async () => {
+    if (!viewer) return;
+    const blob = await (await fetch(viewer.snapshot())).blob();
+    download(drawingFileName('3D.png'), blob);
+  };
+
+  // Drawing
+  $('#btnDownloadSvg').onclick = () => {
+    const svg = $('#drawingHost svg');
+    if (!svg) return;
+    download(drawingFileName('drawing.svg'), new Blob([svg.outerHTML], { type: 'image/svg+xml' }));
+  };
+  $('#btnPrintDrawing').onclick = () => {
+    const svg = $('#drawingHost svg');
+    if (!svg) return;
+    const w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups to print the drawing.', true); return; }
+    w.document.write(`<!doctype html><title>${esc(drawingFileName('drawing'))}</title>
+      <style>@page{size:A4 portrait;margin:8mm}body{margin:0}svg{width:100%;height:auto;display:block}</style>${svg.outerHTML}`);
+    w.document.close();
+    w.onload = () => { w.focus(); w.print(); };
+    setTimeout(() => { try { w.focus(); w.print(); } catch { /* ignore */ } }, 400);
+  };
+
+  // Library
+  const dlg = $('#libraryDialog');
+  $('#btnLibrary').onclick = () => { renderLibrary(); renderArtists(); dlg.showModal(); $('#libSearch').focus(); };
+  $('#libClose').onclick = () => dlg.close();
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  $('#libSearch').addEventListener('input', renderLibrary);
+  $('#libTable').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-del]');
+    if (del) { e.stopPropagation(); deletePainting(del.dataset.del); return; }
+    const row = e.target.closest('tr[data-id]');
+    if (row && isDirty() && !confirm('You have unsaved changes to the current painting. Discard them?')) return;
+    if (row) { savedSnapshot = snapshotOf(cur); dlg.close(); loadPainting(row.dataset.id); }
+  });
+  for (const b of $$('#libTabs button')) {
+    b.onclick = () => {
+      for (const x of $$('#libTabs button')) x.classList.toggle('active', x === b);
+      for (const p of $$('[data-libpanel]')) p.hidden = p.dataset.libpanel !== b.dataset.lib;
+    };
+  }
+  $('#artistForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#artistName').value.trim();
+    if (!name) return;
+    try { db = await api.addArtist(name); $('#artistName').value = ''; refreshLists(); } catch (err) { toast(err.message, true); }
+  });
+  $('#artistTable').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-del-artist]');
+    if (!b) return;
+    try { db = await api.deleteArtist(b.dataset.delArtist); refreshLists(); } catch (err) { toast(err.message, true); }
+  });
+
+  window.addEventListener('beforeunload', saveDraft);
+}
+
+async function init() {
+  $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+  bindEvents();
+  try {
+    db = await api.state();
+  } catch (e) {
+    toast('Could not reach the local server - is server.py running?', true);
+  }
+  refreshLists();
+
+  const draft = loadDraft();
+  if (draft) {
+    // Drop a stale link if the painting was deleted elsewhere.
+    if (draft.cur.id && !db.paintings.some((p) => p.id === draft.cur.id)) draft.cur.id = null;
+    setCurrent({ ...blankPainting(), ...draft.cur }, draft.savedSnapshot);
+  } else {
+    setCurrent(blankPainting());
+  }
+
+  const ui = loadUi();
+  $('#optBlackTop').checked = !!ui.blackCheapTop;
+  setTab(ui.tab || 'cut');
+}
+
+init();

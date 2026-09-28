@@ -1,0 +1,7 @@
+# Saved paintings, settings and uploaded images (local to this PC)
+data/
+__pycache__/
+
+# Build output
+build/
+dist/
