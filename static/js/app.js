@@ -1,4 +1,4 @@
-import { computeFrame, FENCE_FACES, onInnerSide } from './geometry.js';
+import { computeFrame, solveQuad, FENCE_FACES, onInnerSide } from './geometry.js';
 import { buildDrawing } from './drawing.js';
 import { SPECIES } from './textures.js';
 
@@ -125,12 +125,39 @@ function settingsInput() {
 // ---------------------------------------------------------------- Recompute & render
 function recompute() {
   frame = computeFrame(paintingInput(), settingsInput());
+  renderMeasureDiagram();
   renderCutList();
   modelDirty = drawingDirty = true;
   refreshVisiblePanel();
   updateStatus();
   saveDraft();
   updateMatchHint();
+}
+
+// The little painting outline beside the size inputs, drawn to the proportions
+// of the entered sides (and diagonals, if given).
+function renderMeasureDiagram() {
+  const p = paintingInput();
+  const quad = ['top', 'bottom', 'left', 'right'].every((k) => p[k] > 0) ? solveQuad(p) : null;
+  // Fallback when sides are missing: a slightly irregular example shape.
+  const pts = quad ? quad.pts : [[-39, -32], [41, -33], [40, 33], [-39, 31]];
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min(80 / (maxX - minX), 64 / (maxY - minY));
+  const cx = 61, cy = 51, mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+  const P = (q) => [cx + (q[0] - mx) * k, cy - (q[1] - my) * k]; // y up -> SVG y down
+  const [bl, br, tr, tl] = pts.map(P);
+  const L = (x) => x.toFixed(1);
+  const top = cy - ((maxY - my) * k), bottom = cy + ((my - minY) * k);
+  const left = cx - ((mx - minX) * k), right = cx + ((maxX - mx) * k);
+  $('#measureDiagram').innerHTML = `
+    <polygon points="${[bl, br, tr, tl].map((q) => q.map(L).join(',')).join(' ')}" fill="var(--canvas-fill)" stroke="currentColor" stroke-width="1.5"/>
+    <line x1="${L(bl[0])}" y1="${L(bl[1])}" x2="${L(tr[0])}" y2="${L(tr[1])}" stroke="currentColor" stroke-dasharray="3 2" opacity=".45"/>
+    <line x1="${L(tl[0])}" y1="${L(tl[1])}" x2="${L(br[0])}" y2="${L(br[1])}" stroke="currentColor" stroke-dasharray="3 2" opacity=".45"/>
+    <text x="${cx}" y="${L(top - 5)}" text-anchor="middle">Top</text>
+    <text x="${cx}" y="${L(bottom + 11)}" text-anchor="middle">Bottom</text>
+    <text x="${L(left - 5)}" y="${cy}" text-anchor="middle" transform="rotate(-90 ${L(left - 5)} ${cy})">Left</text>
+    <text x="${L(right + 5)}" y="${cy}" text-anchor="middle" transform="rotate(90 ${L(right + 5)} ${cy})">Right</text>`;
 }
 
 function refreshVisiblePanel() {
@@ -160,18 +187,23 @@ function renderCutList() {
 
   const s = settingsInput();
   const q = frame.quad;
-  const stripsRows = frame.strips.map((st) => {
-    const [i, j] = st.corners;
-    const cA = frame.corners[j], cB = frame.corners[i];
+  const stripsRows = stripGroups(frame).map((g) => {
+    const st = g.strips[0];
+    const ends = g.ends.map((e) => `<span class="angle">${e.angle}°</span> <span class="sub">${e.keys.join(' / ')}</span>`).join(' &nbsp;·&nbsp; ');
+    const painting = g.strips.length > 1 && f1(g.strips[0].paintingLength) !== f1(g.strips[1].paintingLength)
+      ? g.strips.map((x) => f1(x.paintingLength)).join(' / ')
+      : f1(st.paintingLength);
     return `<tr>
-      <td><b>${st.name}</b><div class="sub">painting ${f1(st.paintingLength)}</div></td>
+      <td><b>${g.name}</b>${g.strips.length > 1 ? ' <span class="sub">×2</span>' : ''}<div class="sub">painting ${painting}</div></td>
       <td class="num big">${f1(st.good.longPoint)}</td>
       <td class="num">${f1(st.good.shortPoint)}</td>
       <td class="num">${f1(st.cheap.longPoint)}</td>
       <td class="num">${f1(st.cheap.shortPoint)}</td>
-      <td><span class="angle">${f2(cA.miter)}°</span> <span class="sub">${cA.key}</span> &nbsp;·&nbsp; <span class="angle">${f2(cB.miter)}°</span> <span class="sub">${cB.key}</span></td>
+      <td>${ends}</td>
     </tr>`;
   }).join('');
+  const dg = frame.diagonals;
+  const diagDiff = (d) => Math.abs(d.a - d.b);
 
   const cornerRows = frame.corners.map((c) => `<tr>
       <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
@@ -208,6 +240,18 @@ function renderCutList() {
       <tbody>${stripsRows}</tbody>
     </table></div>
 
+    <h3>Diagonals - check the glued-up frame</h3>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Diagonal</th><th class="num">Outside corners</th><th class="num">Inside (good wood)</th><th class="num">Painting</th></tr></thead>
+      <tbody>
+        <tr><td><b>BL → TR</b></td><td class="num big">${f1(dg.outer.a)}</td><td class="num">${f1(dg.inner.a)}</td><td class="num">${f1(q.diagA)}</td></tr>
+        <tr><td><b>TL → BR</b></td><td class="num big">${f1(dg.outer.b)}</td><td class="num">${f1(dg.inner.b)}</td><td class="num">${f1(q.diagB)}</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Measure the assembled frame corner to corner before the glue sets. ${diagDiff(dg.outer) < 0.05
+      ? 'The two diagonals should be equal.'
+      : `This painting isn't square, so the diagonals should differ by ${f1(diagDiff(dg.outer))} mm (outside) - match these numbers rather than making them equal.`}</p>
+
     <h3>Corners &amp; tape shims</h3>
     <div class="table-wrap"><table class="table">
       <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Miter (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
@@ -237,6 +281,31 @@ function renderCutList() {
 
 // Bird's-eye view of the 45° sled: blade at the top, the fence running away from
 // the kerf down to the right, and the L strip against one side of it.
+// Cut list rows in Top, Bottom, Left, Right order. Opposite strips that come out
+// identical (same lengths and the same pair of miter angles) share one row.
+function stripGroups(frame) {
+  const byKey = Object.fromEntries(frame.strips.map((st) => [st.key, st]));
+  const lengths = (st) => [st.good.longPoint, st.good.shortPoint, st.cheap.longPoint, st.cheap.shortPoint].map(f1).join('|');
+  const endsOf = (st) => [st.corners[1], st.corners[0]].map((c) => ({ angle: f2(frame.corners[c].miter), key: frame.corners[c].key }));
+  const angles = (st) => endsOf(st).map((e) => e.angle).sort().join('|');
+  const groups = [];
+  for (const [a, b, name] of [['top', 'bottom', 'Top & Bottom'], ['left', 'right', 'Left & Right']]) {
+    const A = byKey[a], B = byKey[b];
+    if (lengths(A) === lengths(B) && angles(A) === angles(B)) {
+      // Pair up the ends that share an angle, e.g. "45.03° TL / BR".
+      const bEnds = endsOf(B);
+      const ends = endsOf(A).map((e) => {
+        const k = bEnds.findIndex((x) => x.angle === e.angle);
+        return { angle: e.angle, keys: [e.key, bEnds.splice(k, 1)[0].key] };
+      });
+      groups.push({ name, strips: [A, B], ends });
+    } else {
+      for (const st of [A, B]) groups.push({ name: st.name, strips: [st], ends: endsOf(st).map((e) => ({ angle: e.angle, keys: [e.key] })) });
+    }
+  }
+  return groups;
+}
+
 function tapeGuideSvg(s) {
   const c = Math.SQRT1_2;
   const K = 150, AY = 112; // kerf x, and where the fence's blade-side face meets the kerf

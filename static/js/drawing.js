@@ -295,6 +295,7 @@ export function buildDrawing(frame, meta, settings) {
   const notes = [
     `Painting shape: ${q.method === 'diagonals' ? `fitted to measured diagonal(s) (residual ${f1(q.diagResidual)} mm)` : 'assumed "most square" (max area) - measure the diagonals for extra accuracy'}. Diagonals: BL→TR ${f1(q.diagA)}, TL→BR ${f1(q.diagB)}.`,
     `Tape: ${settings.tapeThickness} mm per layer, far point ${settings.tapeDistance} mm from blade, ${(FENCE_FACES[settings.fenceEdge] || FENCE_FACES.outer).short.toLowerCase()} against the fence (${(FENCE_FACES[settings.fenceEdge] || FENCE_FACES.outer).side} side). Rounded to the slightly more acute side.`,
+    `Assembled frame diagonals: outside corners BL→TR ${f1(frame.diagonals.outer.a)}, TL→BR ${f1(frame.diagonals.outer.b)}; inside of good wood BL→TR ${f1(frame.diagonals.inner.a)}, TL→BR ${f1(frame.diagonals.inner.b)}.`,
     `Stock (sum of long points + kerfs): good wood ≥ ${f1(frame.stock.good)} mm, cheap wood ≥ ${f1(frame.stock.cheap)} mm.`,
   ];
   notes.forEach((n) => { s.text(M, y, '• ' + n, { size: 10.5 }); y += 17; });

@@ -326,6 +326,12 @@ export function computeFrame(painting, s) {
       left: dist(outer[0], outer[3]),
       right: dist(outer[1], outer[2]),
     },
+    // Corner-to-corner diagonals of the assembled frame, for checking the glue-up.
+    // a: bottom-left -> top-right, b: top-left -> bottom-right.
+    diagonals: {
+      outer: { a: dist(outer[0], outer[2]), b: dist(outer[3], outer[1]) },
+      inner: { a: dist(polys.good.inner[0], polys.good.inner[2]), b: dist(polys.good.inner[3], polys.good.inner[1]) },
+    },
     totalDepth: Math.max(layers.good.z1, tc + depth),
   };
 }
