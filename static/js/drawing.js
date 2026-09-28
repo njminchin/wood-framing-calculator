@@ -20,7 +20,10 @@ class Svg {
     this.add(`<text class="${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}" dominant-baseline="${baseline}"${tr}>${esc(s)}</text>`);
   }
   /** Aligned dimension from p1 to p2 offset `off` along the normal (negative = up/left for L->R / B->T). */
-  dim(p1, p2, off, label, { size = 10.5 } = {}) {
+  dim(p1, p2, off, label, { size = 10.5, muted = false } = {}) {
+    // Muted: a faint reference dimension that shouldn't compete with the main ones.
+    const ln = muted ? 'dimline dim-muted' : 'dimline', ex = muted ? 'dimext dim-muted' : 'dimext';
+    const tx = muted ? 'dimtext-muted' : 'dimtext', arrow = muted ? 'arrowMuted' : 'arrow';
     const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
     const L = Math.hypot(dx, dy);
     if (L < 1e-6) return;
@@ -30,17 +33,17 @@ class Svg {
     const e1a = P(p1, sg * 2), e1b = P(p1, off + sg * 4);
     const e2a = P(p2, sg * 2), e2b = P(p2, off + sg * 4);
     const q1 = P(p1, off), q2 = P(p2, off);
-    this.line(e1a[0], e1a[1], e1b[0], e1b[1], 'dimext');
-    this.line(e2a[0], e2a[1], e2b[0], e2b[1], 'dimext');
+    this.line(e1a[0], e1a[1], e1b[0], e1b[1], ex);
+    this.line(e2a[0], e2a[1], e2b[0], e2b[1], ex);
     const small = L < 22;
     if (small) {
       // Arrows outside, pointing in
       const o1 = [q1[0] - d[0] * 12, q1[1] - d[1] * 12], o2 = [q2[0] + d[0] * 12, q2[1] + d[1] * 12];
-      this.add(`<line class="dimline" x1="${o1[0]}" y1="${o1[1]}" x2="${q1[0]}" y2="${q1[1]}" marker-end="url(#arrow)"/>`);
-      this.add(`<line class="dimline" x1="${o2[0]}" y1="${o2[1]}" x2="${q2[0]}" y2="${q2[1]}" marker-end="url(#arrow)"/>`);
-      this.line(q1[0], q1[1], q2[0], q2[1], 'dimline');
+      this.add(`<line class="${ln}" x1="${o1[0]}" y1="${o1[1]}" x2="${q1[0]}" y2="${q1[1]}" marker-end="url(#${arrow})"/>`);
+      this.add(`<line class="${ln}" x1="${o2[0]}" y1="${o2[1]}" x2="${q2[0]}" y2="${q2[1]}" marker-end="url(#${arrow})"/>`);
+      this.line(q1[0], q1[1], q2[0], q2[1], ln);
     } else {
-      this.add(`<line class="dimline" x1="${q1[0]}" y1="${q1[1]}" x2="${q2[0]}" y2="${q2[1]}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>`);
+      this.add(`<line class="${ln}" x1="${q1[0]}" y1="${q1[1]}" x2="${q2[0]}" y2="${q2[1]}" marker-start="url(#${arrow})" marker-end="url(#${arrow})"/>`);
     }
     let ang = (Math.atan2(dy, dx) * 180) / Math.PI;
     if (ang > 89.99) ang -= 180;
@@ -52,14 +55,24 @@ class Svg {
       // Too short for a rotated label: write it level, beside the dimension line.
       const side = n[0] * sg;
       const anchor = side > 0.5 ? 'start' : side < -0.5 ? 'end' : 'middle';
-      this.text(tp[0], tp[1], label, { size, anchor, baseline: 'middle', cls: 'dimtext' });
+      this.text(tp[0], tp[1], label, { size, anchor, baseline: 'middle', cls: tx });
     } else {
-      this.text(tp[0], tp[1], label, { size, anchor: 'middle', baseline: 'middle', cls: 'dimtext', rot: ang });
+      this.text(tp[0], tp[1], label, { size, anchor: 'middle', baseline: 'middle', cls: tx, rot: ang });
     }
+  }
+  /** Point-to-point dimension straight across the view (e.g. a diagonal), label at fraction `t` along it. */
+  diagonal(p1, p2, label, t = 0.3) {
+    this.add(`<line class="dimline" x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>`);
+    let ang = (Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180) / Math.PI;
+    if (ang > 89.99) ang -= 180;
+    if (ang <= -90.01) ang += 180;
+    const x = p1[0] + (p2[0] - p1[0]) * t, y = p1[1] + (p2[1] - p1[1]) * t;
+    this.text(x, y, label, { size: 10.5, anchor: 'middle', baseline: 'middle', cls: 'dimtext halo', rot: ang });
   }
   toString(h) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SHEET_W} ${h}" width="${SHEET_W}" height="${h}" font-family="Arial, Helvetica, sans-serif">
 <defs>
+  <marker id="arrowMuted" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1.5 L10,5 L0,8.5 z" fill="#a8a8a8"/></marker>
   <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1.5 L10,5 L0,8.5 z" fill="${DIM}"/></marker>
   <pattern id="hatchGood" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#f1e2cc"/><line x1="0" y1="0" x2="0" y2="6" stroke="#7a4e2a" stroke-width="0.9"/></pattern>
   <pattern id="hatchCheap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="7" height="7" fill="#fbf1d8"/><line x1="0" y1="0" x2="0" y2="7" stroke="#b88a3e" stroke-width="0.7"/></pattern>
@@ -78,6 +91,9 @@ class Svg {
   .dimline{stroke:${DIM};stroke-width:0.7;fill:none}
   .dimext{stroke:${DIM};stroke-width:0.5;fill:none}
   .dimtext{fill:${DIM}}
+  .dim-muted{stroke:#b5b5b5}
+  .dimtext-muted{fill:#9a9a9a}
+  .halo{paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
   .box{stroke:${INK};stroke-width:1;fill:none}
   .muted{fill:#555}
   .angle{fill:#b3261e;font-weight:bold}
@@ -149,10 +165,10 @@ export function buildDrawing(frame, meta, settings) {
     // centre lines
     s.line(cx - 30, cy, cx + 30, cy, 'center');
     s.line(cx, cy - 30, cx, cy + 30, 'center');
-    s.text(cx, cy - 40, 'PAINTING', { size: 11, anchor: 'middle', cls: 'muted', weight: 'bold' });
+    s.text(cx, cy - 40, 'PAINTING', { size: 11, anchor: 'middle', cls: 'muted halo', weight: 'bold' });
     const pp = frame.painting;
-    s.text(cx, cy + 46, `T ${f1(pp.top)} · B ${f1(pp.bottom)}`, { size: 10, anchor: 'middle', cls: 'muted' });
-    s.text(cx, cy + 60, `L ${f1(pp.left)} · R ${f1(pp.right)} · depth ${f1(pp.depth)}`, { size: 10, anchor: 'middle', cls: 'muted' });
+    s.text(cx, cy + 46, `T ${f1(pp.top)} · B ${f1(pp.bottom)}`, { size: 10, anchor: 'middle', cls: 'muted halo' });
+    s.text(cx, cy + 60, `L ${f1(pp.left)} · R ${f1(pp.right)} · depth ${f1(pp.depth)}`, { size: 10, anchor: 'middle', cls: 'muted halo' });
 
     // Outer dims on all 4 sides
     const o = P.good.outer.map(T);
@@ -160,6 +176,9 @@ export function buildDrawing(frame, meta, settings) {
     s.dim(o[0], o[1], 26, `${f1(frame.outerSize.bottom)}`); // bottom
     s.dim(o[0], o[3], -26, `${f1(frame.outerSize.left)}`); // left (B->T, -n is left)
     s.dim(o[1], o[2], 26, `${f1(frame.outerSize.right)}`); // right
+    // Outside corner-to-corner diagonals, for checking the glue-up
+    s.diagonal(o[0], o[2], `BL→TR ${f1(frame.diagonals.outer.a)}`, 0.8);
+    s.diagonal(o[3], o[1], `TL→BR ${f1(frame.diagonals.outer.b)}`, 0.2);
     // Corner angles
     frame.corners.forEach((c, i) => {
       const p = o[i];
@@ -256,7 +275,7 @@ export function buildDrawing(frame, meta, settings) {
       const [i, j] = st.corners; // i = right end, j = left end
       const outerL = P[2], outerR = P[3], innerL = P[1], innerR = P[0];
       s.dim(outerL, outerR, -18, `${f1(part.longPoint)}`, { size: 11.5 });
-      s.dim(innerL, innerR, 18, `${f1(part.shortPoint)}`);
+      s.dim(innerL, innerR, 18, `short point ${f1(part.shortPoint)}`, { size: 8.5, muted: true });
       const rightmost = Math.max(outerR[0], innerR[0]);
       s.dim([rightmost, outerR[1]], [rightmost, innerR[1]], -12, f1(part.width), { size: 9.5 });
 

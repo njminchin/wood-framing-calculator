@@ -6,6 +6,9 @@ export const SPECIES = {
   maple: { label: 'Maple', base: '#e0c79c', dark: '#c3a071', light: '#f0dcb6' },
   cherry: { label: 'Cherry', base: '#9b5534', dark: '#6b3420', light: '#bd7650' },
   ash: { label: 'Ash', base: '#d7c6a3', dark: '#a8906a', light: '#ebdfc4' },
+  jarrah: { label: 'Jarrah', base: '#7b2f1f', dark: '#521b10', light: '#9c4631' },
+  bluegum: { label: 'Blue Gum', base: '#b27a5f', dark: '#86513c', light: '#cc9679' },
+  messmate: { label: 'Messmate', base: '#c3a178', dark: '#94714a', light: '#dabb92' },
   ebonised: { label: 'Ebonised / black', base: '#2b2723', dark: '#141210', light: '#403a34' },
   white: { label: 'White painted', base: '#ecebe6', dark: '#d8d6cf', light: '#f7f6f2' },
 };
