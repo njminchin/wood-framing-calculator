@@ -20,6 +20,7 @@
   --near: #c9541f;
   --blade: #c8352c;
   --good-fill: #c99c6e;
+  --tape: #f0dc8a;
   --cheap-fill: #f2dcae;
   --fence-fill: #d9d2c6;
   --viewer-bg: radial-gradient(ellipse at 50% 40%, #fbfaf7 0%, #e7e2da 100%);
@@ -50,6 +51,7 @@
     --near: #ffa577;
     --blade: #ff7b70;
     --good-fill: #8a6040;
+    --tape: #c9ae4e;
     --cheap-fill: #6e5b3b;
     --fence-fill: #4a453e;
     --viewer-bg: radial-gradient(ellipse at 50% 40%, #34302b 0%, #1c1a18 100%);
@@ -244,6 +246,16 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .guide .g-far { fill: var(--far); }
 .guide .g-near-t { fill: var(--near); font-weight: 700; }
 .guide .g-far-t { fill: var(--far); font-weight: 700; }
+.guide .g-off { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.guide .g-off-t { fill: var(--muted); }
+.guide .g-count { font-weight: 800; font-size: 13px; }
+.guide .g-tape { fill: var(--tape); stroke: var(--text); stroke-width: .6; }
+.guide .g-tape-line { stroke: var(--text); stroke-width: .4; opacity: .7; }
+.guide .g-title { fill: var(--text); font-weight: 700; font-size: 13px; }
+.guide-pick { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+.guide-pick.active { color: var(--text); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
+.table tbody tr.selected td { background: var(--accent-soft); }
+.table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .guide .g-arrow { stroke: var(--muted); stroke-width: 1.5; }
 .guide .g-arrowhead { fill: var(--muted); }
 .guide ul { margin: 6px 0 0; padding-left: 18px; }

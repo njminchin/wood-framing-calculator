@@ -46,6 +46,7 @@ let frame = null;
 let viewer = null;
 let activeTab = 'cut';
 let drawingDirty = true, modelDirty = true;
+let selectedCorner = null; // corner index shown in the tape guide, or null for the general view
 
 function blankPainting() {
   return {
@@ -205,7 +206,7 @@ function renderCutList() {
   const dg = frame.diagonals;
   const diagDiff = (d) => Math.abs(d.a - d.b);
 
-  const cornerRows = frame.corners.map((c) => `<tr>
+  const cornerRows = frame.corners.map((c, i) => `<tr class="clickable${i === selectedCorner ? ' selected' : ''}" data-corner="${i}" title="Show this corner in the tape diagram">
       <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
       <td class="num">${f2(c.angle)}°</td>
       <td class="num angle">${f2(c.mitre)}°</td>
@@ -257,12 +258,13 @@ function renderCutList() {
       <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Mitre (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
       <tbody>${cornerRows}</tbody>
     </table></div>
-    <p class="note">Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.</p>
+    <p class="note">Click a corner to see its tape setup in the diagram below. Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.</p>
 
     <h3>Using the tape shims</h3>
-    <div class="guide">
-      ${tapeGuideSvg(s)}
+    <div class="guide" id="tapeGuide">
+      ${tapeGuideSvg(s, selectedCorner === null ? null : frame.corners[selectedCorner])}
       <div>
+        ${cornerCaption(frame)}
         <div class="guide-label">Against the 45° fence:</div>
         <div class="seg guide-toggle" role="group" aria-label="Face against the fence">
           ${Object.entries(FENCE_FACES).map(([k, f]) => `<button type="button" data-fence-edge="${k}" class="${k === s.fenceEdge ? 'active' : ''}">${f.short}</button>`).join('')}
@@ -279,8 +281,6 @@ function renderCutList() {
     </div>`;
 }
 
-// Bird's-eye view of the 45° sled: blade at the top, the fence running away from
-// the kerf down to the right, and the L strip against one side of it.
 // Cut list rows in Top, Bottom, Left, Right order. Opposite strips that come out
 // identical (same lengths and the same pair of mitre angles) share one row.
 function stripGroups(frame) {
@@ -306,7 +306,25 @@ function stripGroups(frame) {
   return groups;
 }
 
-function tapeGuideSvg(s) {
+// Which corner the tape diagram is showing, and which strip ends that setup cuts.
+function cornerCaption(frame) {
+  if (selectedCorner === null) {
+    return '<p class="guide-pick">Click a row in the corners table above to show that corner\'s tape setup here.</p>';
+  }
+  const c = frame.corners[selectedCorner], t = c.tape;
+  const ends = frame.strips.filter((st) => st.corners.includes(selectedCorner)).map((st) => `${st.name.toLowerCase()} strip`);
+  const setup = t.layers === 0
+    ? 'no tape - cut it straight off the 45° fence'
+    : `<b>${t.layers} layer${t.layers === 1 ? '' : 's'}</b> of tape (${f2(t.shim)} mm) at the <b>${t.location === 'far' ? 'FAR point' : 'NEAR point, by the blade'}</b>`;
+  return `<div class="guide-pick active"><b>${c.key} (${c.name})</b>: ${setup}, to cut <span class="angle">${f2(t.result)}°</span>
+    for the ${f2(c.mitre)}° mitre. Used for the ${c.key} end of the ${ends.join(' and the ')}.
+    <button type="button" class="link" data-corner-clear>Show both points</button></div>`;
+}
+
+// Bird's-eye view of the 45° sled: blade at the top, the fence running away from
+// the kerf down to the right, and the L strip against one side of it. With a
+// corner, only that corner's tape point is lit and its stack of layers is drawn.
+function tapeGuideSvg(s, corner = null) {
   const c = Math.SQRT1_2;
   const K = 150, AY = 112; // kerf x, and where the fence's blade-side face meets the kerf
   // P(a, o): a along the fence away from the blade, o off the fence's blade-side
@@ -342,13 +360,39 @@ function tapeGuideSvg(s) {
   const oLong = toO(GOOD); // good wood's outer face = long point
   const tip = P(-oLong, oLong);
   const o0 = bladeSide ? 0 : -FT, dir = bladeSide ? 1 : -1;
-  const face = o0 + dir * 1.5;
+  const face = o0 - dir * FT / 2; // tape point markers sit on the fence itself
   const near = P(-o0 + 14, face), far = P(175, face);
   const lblO = bladeSide ? Math.min(oMin, -FT) - 12 : Math.max(oMax, 0) + 12; // free side of the fence
   const nearL = P(-o0 + (bladeSide ? 44 : 30), lblO), farL = P(bladeSide ? 190 : 112, lblO);
   const lblAnchor = bladeSide ? 'end' : 'start'; // keep labels clear of the fence
   const fence = [P(0, 0), P(235, 0), P(235, -FT), P(FT, -FT)];
   const fenceL = P(upsideDown ? 150 : 105, -FT / 2);
+  // Selected corner: which point gets the tape, and how many layers.
+  const tape = corner ? corner.tape : null;
+  const layers = tape ? tape.layers : 0;
+  const lit = (loc) => !corner || (layers > 0 && tape.location === loc);
+  const pointLabel = (loc, x, y, title) => {
+    const cls = loc === 'near' ? 'g-near-t' : 'g-far-t';
+    if (!corner) return `<text class="${cls}" x="${x}" y="${y}" text-anchor="${lblAnchor}">${title}</text>`;
+    if (!lit(loc)) return `<text class="g-off-t" x="${x}" y="${y}" text-anchor="${lblAnchor}">${loc.toUpperCase()}</text>`;
+    // Two lines: on the operator side the labels sit above the fence, so lift them clear of it.
+    return `<text class="${cls}" x="${x}" y="${bladeSide ? y : y - 12}" text-anchor="${lblAnchor}">${title}<tspan x="${x}" dy="14" class="g-count">${layers} layer${layers === 1 ? '' : 's'}</tspan></text>`;
+  };
+  // Tape stack between the fence face and the strip, one line per layer (up to 10 drawn).
+  let stack = '';
+  if (corner && layers > 0) {
+    const a = tape.location === 'near' ? -o0 + 14 : 175, shown = Math.min(layers, 10), h = 1.6 * shown + 1.5;
+    const q = (along, off) => P(along, o0 + dir * off);
+    stack = `<polygon class="g-tape" points="${pts([q(a - 14, 0), q(a + 14, 0), q(a + 14, h), q(a - 14, h)])}"/>` +
+      Array.from({ length: shown - 1 }, (_, k) => {
+        const [x1, y1] = q(a - 14, 1.6 * (k + 1) + 0.75), [x2, y2] = q(a + 14, 1.6 * (k + 1) + 0.75);
+        return `<line class="g-tape-line" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+      }).join('');
+  }
+  const title = corner
+    ? `<text class="g-title" x="16" y="66">${corner.key} corner</text>
+       <text class="g-muted" x="16" y="80">mitre ${f2(corner.mitre)}° → cut ${f2(tape.result)}°</text>`
+    : '';
   const bandLabel = (b) => {
     const q = P(b.over ? 60 : 75, (b.oa + b.ob) / 2);
     return `<text class="g-band-t" x="${q[0]}" y="${q[1]}" text-anchor="middle" dominant-baseline="middle" transform="${rot(q)}">${b.label}</text>`;
@@ -369,10 +413,12 @@ function tapeGuideSvg(s) {
     <text class="g-blade-t" x="${K + 8}" y="24">blade</text>
     <circle class="g-tip" cx="${tip[0]}" cy="${tip[1]}" r="3.5"/>
     <text class="g-ink" x="${K - 7}" y="${tip[1] + 4}" text-anchor="end">long point</text>
-    <circle class="g-near" cx="${near[0]}" cy="${near[1]}" r="5.5"/>
-    <text class="g-near-t" x="${nearL[0]}" y="${nearL[1] + 4}" text-anchor="${lblAnchor}">NEAR</text>
-    <circle class="g-far" cx="${far[0]}" cy="${far[1]}" r="5.5"/>
-    <text class="g-far-t" x="${farL[0]}" y="${farL[1] + 4}" text-anchor="${lblAnchor}">FAR · ${f1(s.tapeDistance)} mm</text>
+    ${stack}
+    <circle class="${lit('near') ? 'g-near' : 'g-off'}" cx="${near[0]}" cy="${near[1]}" r="5.5"/>
+    ${pointLabel('near', nearL[0], nearL[1] + 4, 'NEAR')}
+    <circle class="${lit('far') ? 'g-far' : 'g-off'}" cx="${far[0]}" cy="${far[1]}" r="5.5"/>
+    ${pointLabel('far', farL[0], farL[1] + 4, `FAR · ${f1(s.tapeDistance)} mm`)}
+    ${title}
     <line class="g-arrow" x1="28" y1="270" x2="28" y2="215" marker-end="url(#gArrow)"/>
     <text class="g-muted" x="28" y="284" text-anchor="middle">feed</text>
   </svg>`;
@@ -744,6 +790,14 @@ function bindEvents() {
   // Tabs
   for (const b of $$('.tabs button')) b.onclick = () => setTab(b.dataset.tab);
   $('#panel-cut').addEventListener('click', (e) => {
+    const row = e.target.closest('tr[data-corner]');
+    if (row || e.target.closest('[data-corner-clear]')) {
+      const i = row ? Number(row.dataset.corner) : null;
+      selectedCorner = i === selectedCorner ? null : i;
+      renderCutList();
+      if (row) $('#tapeGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
     const btn = e.target.closest('[data-fence-edge]');
     if (!btn) return;
     const sel = $('#s-fence');
