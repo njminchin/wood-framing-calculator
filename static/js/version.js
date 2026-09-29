@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.3.0',
+    date: '2026-09-29',
+    changes: [
+      'New Generate button beside the SKU: fills in the next SKU, e.g. FF-2026-0042. The number carries on from your saved paintings and starts again at 0001 each year.',
+      'New SKU numbering section to set the format and prefix, with a preview of the next SKU. It’s saved automatically as your default.',
+      'A guided tour shows new users around the app. Run it again any time from Tour under the title.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-09-29',
     changes: [

@@ -16,7 +16,11 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="1" fill="var(--wood)"/><rect x="8" y="8" width="16" height="16" fill="var(--accent)"/></svg>
       <div class="brand-text">
         <span>Floating Frame Calculator</span>
-        <button type="button" id="btnVersion" class="version-link" title="What's new in each version"><span data-version></span><span id="versionNew" class="version-new" hidden>new</span></button>
+        <div class="brand-sub">
+          <button type="button" id="btnVersion" class="version-link" title="What's new in each version"><span data-version></span><span id="versionNew" class="version-new" hidden>new</span></button>
+          <span class="version-text" aria-hidden="true">·</span>
+          <button type="button" id="btnTour" class="version-link" title="A quick guided tour of the app">Tour</button>
+        </div>
       </div>
     </div>
     <div class="quickload">
@@ -39,11 +43,14 @@
 
   <div class="layout">
     <aside class="sidebar" id="form">
-      <section class="card">
+      <section class="card" id="cardPainting">
         <h2>Painting</h2>
         <div class="field">
           <label for="f-sku">SKU</label>
-          <input id="f-sku" data-p="sku" list="dlSkus" autocomplete="off">
+          <div class="input-with-button">
+            <input id="f-sku" data-p="sku" list="dlSkus" autocomplete="off">
+            <button type="button" id="btnGenerateSku" title="Make the next SKU using the format in SKU numbering (below)">Generate</button>
+          </div>
         </div>
         <div class="field">
           <label for="f-title">Title</label>
@@ -56,7 +63,7 @@
         <div id="matchHint" class="hint" hidden></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="cardSize">
         <h2>Painting size <span class="unit">mm</span></h2>
         <div class="measure-wrap">
           <svg class="measure-diagram" id="measureDiagram" viewBox="0 0 120 100" aria-hidden="true">
@@ -113,7 +120,7 @@
         </details>
       </section>
 
-      <section class="card">
+      <section class="card" id="cardImage">
         <h2>Painting image</h2>
         <div class="image-row">
           <div id="imgThumb" class="thumb"><span>Default image</span></div>
@@ -125,7 +132,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="cardFrame">
         <h2>Frame settings <span class="unit">mm</span></h2>
         <p class="help">Saved with each painting. "Save as defaults" makes them the starting point for new paintings.</p>
         <div class="row2">
@@ -172,7 +179,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="cardCutting">
         <h2>Cutting setup</h2>
         <div class="row2">
           <div class="field">
@@ -198,6 +205,32 @@
             <input id="s-kerf" data-s="kerf" type="number" step="0.1" min="0">
           </div>
         </div>
+      </section>
+
+      <section class="card" id="cardSku">
+        <h2>SKU numbering</h2>
+        <div class="row-wide">
+          <div class="field">
+            <label for="sku-format">Format</label>
+            <input id="sku-format" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="sku-prefix">Prefix</label>
+            <input id="sku-prefix" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <p class="help">Next SKU: <b id="skuPreview"></b> <span id="skuWarning" class="sku-warning"></span></p>
+        <details class="more">
+          <summary>Format codes</summary>
+          <p class="help">
+            <code>{PREFIX}</code> the prefix · <code>{YYYY}</code> year (2026) · <code>{YY}</code> short year (26) ·
+            <code>{MM}</code> month · <code>{SEQ:4}</code> running number with 4 digits ·
+            <code>{ARTIST}</code> artist initials · <code>{SIZE}</code> width x height (e.g. 600x400).
+            Anything else is used as typed.
+          </p>
+          <p class="help">The running number counts up from the highest SKU already saved with the same other parts, so with <code>{YYYY}</code> it starts again at 1 each year.</p>
+        </details>
+        <p class="help">Saved automatically as your default.</p>
       </section>
     </aside>
 

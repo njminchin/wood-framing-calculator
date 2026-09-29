@@ -2,6 +2,8 @@ import { computeFrame, solveQuad, FENCE_FACES, onInnerSide } from './geometry.js
 import { buildDrawing } from './drawing.js';
 import { SPECIES } from './textures.js';
 import { VERSION, CHANGELOG } from './version.js';
+import { nextSku, DEFAULT_SKU_FORMAT } from './sku.js';
+import { startTour } from './tour.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -139,6 +141,7 @@ function recompute() {
   frame = computeFrame(paintingInput(), settingsInput());
   renderMeasureDiagram();
   renderCutList();
+  updateSkuPreview();
   modelDirty = drawingDirty = true;
   refreshVisiblePanel();
   updateStatus();
@@ -495,8 +498,11 @@ function download(name, blob) {
 }
 
 // ---------------------------------------------------------------- Status / lists
+// SKU numbering is a personal preference saved straight to the defaults, not a frame setting.
+const SKU_SETTINGS = ['skuFormat', 'skuPrefix'];
+
 function settingsMatchDefaults() {
-  return Object.keys(db.settings).every((k) => String(cur.settings[k] ?? '') === String(db.settings[k] ?? ''));
+  return Object.keys(db.settings).filter((k) => !SKU_SETTINGS.includes(k)).every((k) => String(cur.settings[k] ?? '') === String(db.settings[k] ?? ''));
 }
 
 function updateDefaultsButtons() {
@@ -526,6 +532,7 @@ function refreshLists() {
   $('#dlTitles').innerHTML = [...new Set(sorted.map((p) => p.title).filter(Boolean))].map(opt).join('');
   $('#dlArtists').innerHTML = db.artists.map(opt).join('');
   if ($('#libraryDialog').open) { renderLibrary(); renderArtists(); }
+  updateSkuPreview();
 }
 
 function findSaved({ sku, title }) {
@@ -632,6 +639,61 @@ async function save(message = 'Saved') {
 }
 
 // Save what's on screen as a new painting; the one it was loaded from is left as it was.
+// ---------------------------------------------------------------- SKU generation
+function skuFor() {
+  const p = paintingInput();
+  return nextSku(db.settings.skuFormat || DEFAULT_SKU_FORMAT, {
+    prefix: db.settings.skuPrefix,
+    artist: cur ? cur.artist : '',
+    width: p.top,
+    height: p.left,
+  }, db.paintings.map((x) => x.sku));
+}
+
+function updateSkuPreview() {
+  if (!cur) return;
+  const r = skuFor();
+  $('#skuPreview').textContent = r.sku || '(empty)';
+  $('#skuWarning').textContent = r.missing.length
+    ? `(needs the ${r.missing.join(' and ')})`
+    : r.hasSeq ? '' : '- no {SEQ} in the format, so SKUs can repeat';
+}
+
+function generateSku() {
+  readAll();
+  const r = skuFor();
+  if (r.missing.length) {
+    toast(`Fill in the ${r.missing.join(' and ')} first - the SKU format uses it.`, true);
+    return;
+  }
+  if (db.paintings.some((p) => norm(p.sku) === norm(r.sku) && p.id !== cur.id)) {
+    toast(`${r.sku} is already used. Add {SEQ} to the SKU format so each one is different.`, true);
+    return;
+  }
+  const el = $('#f-sku');
+  el.value = r.sku;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+let skuSaveTimer;
+function bindSkuSettings() {
+  $('#sku-format').value = db.settings.skuFormat || DEFAULT_SKU_FORMAT;
+  $('#sku-prefix').value = db.settings.skuPrefix ?? '';
+  const onChange = () => {
+    db.settings.skuFormat = $('#sku-format').value.trim() || DEFAULT_SKU_FORMAT;
+    db.settings.skuPrefix = $('#sku-prefix').value.trim();
+    updateSkuPreview();
+    clearTimeout(skuSaveTimer);
+    skuSaveTimer = setTimeout(async () => {
+      try { db.settings = (await api.saveSettings(db.settings)).settings; }
+      catch (e) { toast("Couldn't save the SKU format: " + e.message, true); }
+    }, 700);
+  };
+  $('#sku-format').addEventListener('input', onChange);
+  $('#sku-prefix').addEventListener('input', onChange);
+  $('#btnGenerateSku').onclick = generateSku;
+}
+
 async function saveAsNew() {
   readAll();
   if (!cur.id) return save(); // never saved, so a normal save already makes a new painting
@@ -1011,6 +1073,50 @@ function setupVersion() {
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
 }
 
+// ---------------------------------------------------------------- Guided tour
+// Shown automatically the first time someone uses the app (per user, per browser);
+// "Tour" under the title runs it again.
+const tourKey = () => 'floating-frame:tour-done' + (currentUser ? ':' + currentUser : '');
+
+function runTour() {
+  const tabBefore = activeTab;
+  startTour([
+    { target: null, title: 'Welcome to the Floating Frame Calculator',
+      text: '<p>This quick tour shows how to get from a painting’s measurements to a cut list for its floating frame. It takes about a minute.</p><p>You can leave any time, and run it again from <b>Tour</b> under the title.</p>' },
+    { target: '#cardPainting', title: 'The painting',
+      text: '<p>Give each painting an SKU (or press <b>Generate</b>), a title and the artist. Artists you’ve used before appear in the list as you type.</p>' },
+    { target: '#cardSize', title: 'Measure the canvas',
+      text: '<p>Enter the top and bottom widths and the left and right heights in mm. Stretched canvases are rarely perfectly square, so measure all four; tick <b>same as</b> when they match.</p><p>Adding the two diagonals gives the most accurate corner angles.</p>' },
+    { target: '#cardFrame', title: 'Frame settings',
+      text: '<p>Your wood sizes, the gap around the painting and the lip. They’re saved with each painting, and <b>Save as defaults</b> makes them the starting point for new ones.</p>' },
+    { target: '#cardCutting', title: 'Your mitre sled',
+      text: '<p>Tell the app how you cut: how far the far tape point is from the blade, how thick one layer of tape is, and which face of the L goes against the 45° fence.</p>' },
+    { target: '#panel-cut', before: () => setTab('cut'), title: 'The cut list',
+      text: '<p>Once the painting is measured, this shows the length of all 8 strips (cut to the <b>long point</b>), the mitre angle at each end, and how many layers of masking tape to put where for each corner.</p><p>Click a corner to see its setup on the sled diagram.</p>' },
+    { target: '[data-tab="model"]', title: '3D model',
+      text: '<p>See the finished frame from any angle, show the measurements, and upload a photo of the painting to see it in the frame.</p>' },
+    { target: '[data-tab="drawing"]', title: 'Technical drawing',
+      text: '<p>A drawing of the frame and every strip with its dimensions, to print or download for the workshop.</p>' },
+    { target: '#btnSave', title: 'Save your work',
+      text: '<p><b>Save</b> stores the painting in your library. <b>Save as new</b> makes a copy (handy for similar paintings) and <b>New</b> starts a blank one.</p>' },
+    { target: '.quickload', title: 'Find saved paintings',
+      text: '<p>Search by SKU, title or artist, or open the <b>Library</b> to see everything you’ve saved.</p>' },
+    { target: '.brand-sub', title: 'That’s it!',
+      text: '<p>Click the version number to see what’s changed in each update, or <b>Tour</b> to see this again.</p>' },
+  ], {
+    onFinish: () => {
+      try { localStorage.setItem(tourKey(), '1'); } catch { /* ignore */ }
+      setTab(tabBefore);
+    },
+  });
+}
+
+function maybeStartTour() {
+  let done = true;
+  try { done = !!localStorage.getItem(tourKey()); } catch { /* ignore */ }
+  if (!done) setTimeout(runTour, 500);
+}
+
 // Admins can see and change the sign-up invite code.
 function setupInviteDialog() {
   const dlg = $('#inviteDialog');
@@ -1063,6 +1169,7 @@ async function init() {
     toast('Could not reach the server - is it running?', true);
   }
   refreshLists();
+  bindSkuSettings();
 
   const draft = loadDraft();
   if (draft) {
@@ -1076,6 +1183,8 @@ async function init() {
   const ui = loadUi();
   $('#optBlackTop').checked = !!ui.blackCheapTop;
   setTab(ui.tab || 'cut');
+  $('#btnTour').onclick = runTour;
+  maybeStartTour();
 }
 
 init();

@@ -76,6 +76,8 @@ DEFAULT_SETTINGS = {
     "tapeThickness": 0.12,
     "fenceEdge": "outer",
     "kerf": 3,
+    "skuFormat": "{PREFIX}-{YYYY}-{SEQ:4}",
+    "skuPrefix": "FF",
 }
 
 _lock = threading.Lock()
