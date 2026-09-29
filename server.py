@@ -24,6 +24,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -116,6 +117,48 @@ class Store:
 
 
 SHARED_STORE = Store(DATA_DIR)
+
+# Read-only share links: token -> {"user": account id (None without accounts), "painting": id}.
+# Kept in one file for the whole site so a link can be opened without signing in.
+SHARES_PATH = os.path.join(DATA_DIR, "shares.json")
+
+
+def load_shares():
+    try:
+        with open(SHARES_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_shares(shares):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = SHARES_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(shares, f, indent=2)
+    os.replace(tmp, SHARES_PATH)
+
+
+def shared_painting(token):
+    """(store, db, painting, owner name) for a share token, or None if it's not valid any more."""
+    entry = load_shares().get(token) if isinstance(token, str) else None
+    if not entry:
+        return None
+    owner = None
+    if ACCOUNTS is None:
+        if entry.get("user"):
+            return None
+        store = SHARED_STORE
+    else:
+        user = ACCOUNTS.get(entry.get("user"))
+        if user is None:
+            return None
+        store, owner = Store(ACCOUNTS.user_dir(user)), user["username"]
+    db = store.load()
+    painting = next((p for p in db["paintings"] if p["id"] == entry.get("painting")), None)
+    if painting is None or painting.get("shareToken") != token:
+        return None
+    return store, db, painting, owner
 
 
 def all_artists(db):
@@ -307,24 +350,40 @@ class Handler(BaseHTTPRequestHandler):
                 with _lock:
                     self._json(self._state(store.load()))
             return
+        m = re.fullmatch(r"/api/share/([A-Za-z0-9_-]+)(/image)?", path)
+        if m:
+            with _lock:
+                found = shared_painting(m.group(1))
+            if found is None:
+                return self._error(HTTPStatus.NOT_FOUND, "This share link isn't valid any more. Ask the owner for a new one.")
+            store, db, painting, owner = found
+            if not m.group(2):
+                return self._json({"painting": painting, "settings": db["settings"], "owner": owner})
+            if not painting.get("image"):
+                return self._error(HTTPStatus.NOT_FOUND, "Image not found")
+            return self._send_image(os.path.join(store.image_dir, painting["image"]))
         m = re.fullmatch(r"/images/([A-Za-z0-9_-]+\.(?:jpg|png|webp|gif))", path)
         if m:
             store = self._store()
             if not store:
                 return
-            file_path = os.path.join(store.image_dir, m.group(1))
-            if not os.path.exists(file_path):
-                return self._error(HTTPStatus.NOT_FOUND, "Image not found")
-            with open(file_path, "rb") as f:
-                data = f.read()
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", mimetypes.guess_type(file_path)[0] or "application/octet-stream")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-            return
+            return self._send_image(os.path.join(store.image_dir, m.group(1)))
         if path.startswith("/api/"):
             return self._error(HTTPStatus.NOT_FOUND, "Unknown endpoint")
+        return self._send_static(path)
+
+    def _send_image(self, file_path):
+        if not os.path.exists(file_path):
+            return self._error(HTTPStatus.NOT_FOUND, "Image not found")
+        with open(file_path, "rb") as f:
+            data = f.read()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", mimetypes.guess_type(file_path)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_static(self, path):
         data = read_static(path)
         if data is None:
             return self._error(HTTPStatus.NOT_FOUND, "Not found")
@@ -379,6 +438,12 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/image", path)
             if m:
                 return self._upload_image(store, m.group(1))
+            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/share", path)
+            if m:
+                return self._set_share(store, m.group(1), bool(self._json_body().get("share")))
+            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/made", path)
+            if m:
+                return self._set_made(store, m.group(1), bool(self._json_body().get("made")))
             if path == "/api/artists":
                 name = str(self._json_body().get("name", "")).strip()
                 if not name:
@@ -411,6 +476,9 @@ class Handler(BaseHTTPRequestHandler):
                     painting["image"] = None
                 else:
                     db["paintings"] = [p for p in db["paintings"] if p["id"] != pid]
+                    shares = load_shares()
+                    if shares.pop(painting.get("shareToken"), None):
+                        save_shares(shares)
                 store.save(db)
                 return self._json(self._state(db))
         m = re.fullmatch(r"/api/artists/(.+)", path)
@@ -430,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = body.get("id")
             existing = next((p for p in db["paintings"] if p["id"] == pid), None) if pid else None
             record = dict(existing or {})
-            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt")})
+            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "madeAt", "shareToken")})
             if existing is None:
                 record["id"] = uuid.uuid4().hex[:12]
                 record["createdAt"] = time.time()
@@ -447,6 +515,42 @@ class Handler(BaseHTTPRequestHandler):
             store.save(db)
             state = self._state(db)
             state["painting"] = record
+            return self._json(state)
+
+    def _set_share(self, store, pid, share):
+        """Make (or keep) a read-only share link for a painting, or stop sharing it."""
+        with _lock:
+            db = store.load()
+            painting = next((p for p in db["paintings"] if p["id"] == pid), None)
+            if painting is None:
+                return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
+            shares = load_shares()
+            token = painting.get("shareToken")
+            if share and not (token and token in shares):
+                token = secrets.token_urlsafe(16)
+                user = self._user()
+                shares[token] = {"user": user["id"] if user else None, "painting": pid, "createdAt": time.time()}
+                painting["shareToken"] = token
+            elif not share:
+                shares.pop(token, None)
+                painting["shareToken"] = None
+            save_shares(shares)
+            store.save(db)
+            state = self._state(db)
+            state["painting"] = painting
+            return self._json(state)
+
+    def _set_made(self, store, pid, made):
+        """Mark a painting's frame as made (with the time) or not made yet."""
+        with _lock:
+            db = store.load()
+            painting = next((p for p in db["paintings"] if p["id"] == pid), None)
+            if painting is None:
+                return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
+            painting["madeAt"] = time.time() if made else None
+            store.save(db)
+            state = self._state(db)
+            state["painting"] = painting
             return self._json(state)
 
     def _upload_image(self, store, pid):

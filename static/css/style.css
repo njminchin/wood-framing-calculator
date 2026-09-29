@@ -15,6 +15,7 @@
   --err-bg: #fde6e4;
   --err-ink: #9b2019;
   --ok: #2e7d4f;
+  --ok-soft: #e3f2e8;
   --canvas-fill: #efe6d6;
   --far: #1f5fcf;
   --near: #c9541f;
@@ -46,6 +47,7 @@
     --err-bg: #3d1f1c;
     --err-ink: #ff9d92;
     --ok: #6fcf97;
+    --ok-soft: #1f3327;
     --canvas-fill: #3a342c;
     --far: #8db4ff;
     --near: #ffa577;
@@ -323,7 +325,30 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .dialog-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
 .dialog-head h2 { margin: 0; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
 .dialog-head .link { margin-left: auto; }
-#libSearch { margin-bottom: 10px; }
+#libSearch { margin-bottom: 0; flex: 1; }
+.lib-filters { display: flex; gap: 8px; margin-bottom: 10px; }
+.lib-filters select { width: auto; }
+.table tbody tr.made td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+
+/* Made */
+.made-pill { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--ok); background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
+.made-box { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; font-size: 12.5px; color: var(--muted); padding: 6px 10px; margin: -2px 0 12px; border: 1px dashed var(--line-strong); border-radius: 7px; }
+.made-box button { padding: 3px 10px; font-size: 12.5px; }
+.made-box.is-made { color: var(--text); background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.made-box.is-made b { color: var(--ok); }
+.made-warn { display: block; color: var(--warn-ink); font-size: 12px; margin-top: 2px; }
+.card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
+
+/* Share links */
+#shareUrl { margin: 4px 0 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
+.share-banner .sub { color: var(--muted); }
+body.view-only .quickload, body.view-only #btnNew, body.view-only #btnSave, body.view-only #btnSaveAsNew,
+body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #btnMade,
+body.view-only #btnSaveDefaults, body.view-only #btnResetDefaults, body.view-only #btnGenerateSku,
+body.view-only #btnTour, body.view-only .brand-sub .version-text, body.view-only .image-actions,
+body.view-only #matchHint { display: none !important; }
+body.view-only .made-box:not(.is-made) { display: none; }
 .dialog .table-wrap { max-height: 60vh; overflow: auto; box-shadow: none; }
 .inline-form { display: flex; gap: 8px; margin-bottom: 10px; }
 
@@ -415,3 +440,4 @@ details.more > summary.changed::after { content: " \2022 changed"; font-weight: 
   body { background: #fff; color: #000; }
   .stat, .table-wrap, .guide { box-shadow: none; }
 }
+.share-banner.error { background: var(--err-bg); color: var(--err-ink); }

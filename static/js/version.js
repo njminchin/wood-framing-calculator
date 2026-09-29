@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.5.0',
+    date: '2026-09-29',
+    changes: [
+      'Mark a frame as made with the new button at the top of the Painting section. A made frame shows a green “Made” badge with the date, and you’re warned if you start changing it.',
+      'The Library has a Made column, and you can show all paintings, only those not made yet, or only the made ones.',
+      'New Share button: makes a read-only link to one frame that anyone can open without signing in. They see the cut list, 3D model and drawing, and can try other frame settings without saving anything. Stop sharing turns the link off.',
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-09-29',
     changes: [

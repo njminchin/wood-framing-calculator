@@ -27,11 +27,17 @@
       <input id="quickLoad" list="dlPaintings" placeholder="Load a saved painting - search SKU, title or artist…" autocomplete="off">
       <button id="btnLibrary" type="button">Library</button>
     </div>
+    <div id="shareBanner" class="share-banner" hidden>
+      <b>Shared frame</b> <span id="shareOwner"></span> &middot; read only.
+      <span class="sub">You can try other frame settings; nothing is saved.</span>
+    </div>
     <div class="actions">
+      <span id="madeBadge" class="made-pill" hidden>&#10003; Made</span>
       <span id="saveStatus" class="save-status"></span>
       <button id="btnReload" type="button" class="link" hidden title="Discard your changes and reload the saved version">&#8635; Reload</button>
       <button id="btnNew" type="button">New</button>
       <button id="btnSaveAsNew" type="button" title="Save a copy as a new painting, leaving the original unchanged (Ctrl+Shift+S)">Save as new</button>
+      <button id="btnShare" type="button" title="Get a read-only link to this frame">Share</button>
       <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
       <div id="userMenu" class="user-menu" hidden>
         <span id="userName" class="user-name"></span>
@@ -46,6 +52,10 @@
     <aside class="sidebar" id="form">
       <section class="card" id="cardPainting">
         <h2>Painting</h2>
+        <div id="madeBox" class="made-box">
+          <span id="madeText"></span>
+          <button id="btnMade" type="button">Mark as made</button>
+        </div>
         <div class="field">
           <label for="f-sku">SKU</label>
           <div class="input-with-button">
@@ -287,7 +297,14 @@
       <button type="button" class="link" id="libClose">Close</button>
     </div>
     <div data-libpanel="paintings">
-      <input id="libSearch" type="search" placeholder="Filter by SKU, title or artist…">
+      <div class="lib-filters">
+        <input id="libSearch" type="search" placeholder="Filter by SKU, title or artist…">
+        <select id="libMade" aria-label="Show">
+          <option value="all">All paintings</option>
+          <option value="notmade">Not made yet</option>
+          <option value="made">Made</option>
+        </select>
+      </div>
       <div class="table-wrap"><table class="table" id="libTable"></table></div>
     </div>
     <div data-libpanel="artists" hidden>
@@ -311,6 +328,25 @@
         <button type="button" class="link" id="pwCancel">Cancel</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="shareDialog" class="dialog dialog-small">
+    <div class="dialog-head">
+      <h2>Share this frame</h2>
+      <button type="button" class="link" id="shareClose">Close</button>
+    </div>
+    <p class="help">Anyone with the link can see this frame's cut list, 3D model and drawing, without signing in. They can't change anything you've saved, and they only see this painting, not the rest of your library.</p>
+    <div id="shareOff">
+      <button type="button" id="shareCreate" class="primary">Create link</button>
+    </div>
+    <div id="shareOn" hidden>
+      <input id="shareUrl" readonly>
+      <div class="button-row">
+        <button type="button" id="shareCopy" class="primary">Copy link</button>
+        <button type="button" id="shareStop" class="link danger">Stop sharing</button>
+      </div>
+      <p class="help invite-note">The link always shows the latest saved version. Stop sharing to turn it off; a new link can be made afterwards.</p>
+    </div>
   </dialog>
 
   <dialog id="inviteDialog" class="dialog dialog-small">

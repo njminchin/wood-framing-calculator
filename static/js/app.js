@@ -47,6 +47,9 @@ const api = {
   deletePainting: (id) => api.req('DELETE', `api/paintings/${id}`),
   uploadImage: (id, blob) => api.req('POST', `api/paintings/${id}/image`, blob),
   deleteImage: (id) => api.req('DELETE', `api/paintings/${id}/image`),
+  setShare: (id, share) => api.req('POST', `api/paintings/${id}/share`, { share }),
+  shared: (token) => api.req('GET', `api/share/${encodeURIComponent(token)}`),
+  setMade: (id, made) => api.req('POST', `api/paintings/${id}/made`, { made }),
   addArtist: (name) => api.req('POST', 'api/artists', { name }),
   deleteArtist: (name) => api.req('DELETE', `api/artists/${encodeURIComponent(name)}`),
 };
@@ -60,6 +63,9 @@ let viewer = null;
 let activeTab = 'cut';
 let drawingDirty = true, modelDirty = true;
 let selectedCorner = null; // corner index shown in the tape guide, or null for the general view
+// Opened from a share link: the painting is read only, the frame settings can be tried out but aren't saved.
+const SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+const viewOnly = !!SHARE_TOKEN;
 
 function blankPainting() {
   return {
@@ -68,6 +74,7 @@ function blankPainting() {
     leftHeight: null, rightHeight: null, sameHeight: true,
     depth: null, diagA: null, diagB: null,
     image: null, // saved image filename on the server
+    madeAt: null, // when the frame was marked as made (seconds), saved straight away
     pendingImage: null, // data URL of a newly chosen image (uploaded on save)
     removeImage: false,
     settings: { ...db.settings },
@@ -76,7 +83,7 @@ function blankPainting() {
 
 function fromRecord(rec) {
   const p = blankPainting();
-  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt']) if (k in rec) p[k] = rec[k];
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
   p.settings = { ...db.settings, ...(rec.settings || {}) };
   return p;
 }
@@ -111,8 +118,8 @@ function readField(el) {
 
 function syncSameFields() {
   const b = $('#f-bottom'), r = $('#f-right');
-  b.disabled = !!cur.sameWidth;
-  r.disabled = !!cur.sameHeight;
+  b.disabled = viewOnly || !!cur.sameWidth;
+  r.disabled = viewOnly || !!cur.sameHeight;
   if (cur.sameWidth) b.value = cur.topWidth ?? '';
   if (cur.sameHeight) r.value = cur.leftHeight ?? '';
 }
@@ -460,7 +467,9 @@ function showViewerMsg(msg) {
 
 function currentImageUrl() {
   if (cur.pendingImage) return cur.pendingImage;
-  if (cur.image && !cur.removeImage) return `images/${cur.image}?v=${cur.updatedAt || ''}`;
+  if (cur.image && !cur.removeImage) {
+    return viewOnly ? `api/share/${encodeURIComponent(SHARE_TOKEN)}/image?v=${cur.updatedAt || ''}` : `images/${cur.image}?v=${cur.updatedAt || ''}`;
+  }
   return null;
 }
 
@@ -619,6 +628,10 @@ function markChanges() {
 }
 
 async function reloadSaved() {
+  if (viewOnly) {
+    if (confirm('Go back to the frame settings that were shared?')) setCurrent(fromRecord(db.paintings[0]));
+    return;
+  }
   if (!cur.id) return;
   if (!confirm('Discard all your unsaved changes to this painting and reload the saved version?')) return;
   try {
@@ -636,12 +649,18 @@ async function reloadSaved() {
 
 function updateStatus() {
   updateDefaultsButtons();
+  updateMade();
   $('#btnSaveAsNew').disabled = !cur.id; // only useful once a saved painting is loaded
   const el = $('#saveStatus');
   const changes = markChanges();
   const dirty = !!cur.id && isDirty();
   $('#btnReload').hidden = !dirty;
-  if (!cur.id) { el.textContent = 'New - not saved yet'; el.className = 'save-status dirty'; }
+  $('#btnShare').disabled = !cur.id;
+  if (viewOnly) {
+    el.textContent = dirty ? `${changes || 'Some'} change${changes === 1 ? '' : 's'} - not saved` : 'Read only';
+    el.className = 'save-status' + (dirty ? ' dirty' : '');
+    $('#btnReload').title = 'Go back to the shared frame settings';
+  } else if (!cur.id) { el.textContent = 'New - not saved yet'; el.className = 'save-status dirty'; }
   else if (dirty) {
     el.textContent = changes ? `${changes} unsaved change${changes === 1 ? '' : 's'}` : 'Unsaved changes';
     el.className = 'save-status dirty';
@@ -681,7 +700,7 @@ function updateMatchHint() {
 
 // ---------------------------------------------------------------- Draft (browser cache of unsaved input)
 function saveDraft() {
-  if (!cur) return; // nothing loaded yet (e.g. still on the sign-in screen)
+  if (!cur || viewOnly) return; // nothing loaded yet (e.g. still on the sign-in screen)
   try { localStorage.setItem(draftKey(), JSON.stringify({ cur, savedSnapshot })); }
   catch {
     // Most likely the pending image is too big for localStorage; keep the rest.
@@ -725,6 +744,7 @@ function newPainting() {
 }
 
 async function save(message = 'Saved') {
+  if (viewOnly) { toast("This is a shared frame, so changes can't be saved.", true); return; }
   readAll();
   if (!cur.sku.trim() && !cur.title.trim()) {
     toast('Enter an SKU or a title before saving.', true);
@@ -821,6 +841,7 @@ function bindSkuSettings() {
 }
 
 async function saveAsNew() {
+  if (viewOnly) return save();
   readAll();
   if (!cur.id) return save(); // never saved, so a normal save already makes a new painting
   if (cur.sku.trim() && db.paintings.some((p) => norm(p.sku) === norm(cur.sku))) {
@@ -846,6 +867,8 @@ async function saveAsNew() {
   cur.id = null;
   cur.image = null;
   cur.removeImage = false;
+  cur.madeAt = null; // the copy's frame hasn't been made yet
+  cur.shareToken = null;
   await save('Saved as a new painting');
 }
 
@@ -863,6 +886,111 @@ async function deletePainting(id) {
     refreshLists();
     toast('Deleted');
   } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- Made
+// A frame can be marked as made. This is saved straight away (it isn't one of
+// the painting's values, so it doesn't count as an unsaved change).
+const madeDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
+function updateMade() {
+  const made = !!(cur.id && cur.madeAt);
+  const box = $('#madeBox');
+  box.classList.toggle('is-made', made);
+  $('#madeBadge').hidden = !made;
+  $('#madeBadge').title = made ? `This frame was made on ${madeDate(cur.madeAt)}` : '';
+  $('#cardPainting').classList.toggle('made', made);
+  const text = $('#madeText'), btn = $('#btnMade');
+  btn.disabled = !cur.id;
+  if (made) {
+    text.innerHTML = `<b>&#10003; Made</b> on ${esc(madeDate(cur.madeAt))}`
+      + (isDirty() && !viewOnly ? '<span class="made-warn">You’re changing a frame that’s already been made.</span>' : '');
+    btn.textContent = 'Not made';
+    btn.title = 'Mark this frame as not made yet';
+  } else {
+    text.textContent = cur.id ? 'Frame not made yet' : 'Save the painting to mark its frame as made';
+    btn.textContent = 'Mark as made';
+    btn.title = cur.id ? 'Record that this frame has been made' : 'Save the painting first';
+  }
+}
+
+async function toggleMade() {
+  if (!cur.id) return;
+  const made = !cur.madeAt;
+  if (!made && !confirm('Mark this frame as not made yet?')) return;
+  try {
+    const res = await api.setMade(cur.id, made);
+    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    cur.madeAt = res.painting.madeAt ?? null;
+    refreshLists();
+    updateStatus();
+    saveDraft();
+    toast(made ? 'Marked as made' : 'Marked as not made');
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- Share links
+const shareUrl = (token) => `${location.origin}${location.pathname}?share=${encodeURIComponent(token)}`;
+
+function showShare() {
+  const token = cur.shareToken;
+  $('#shareOff').hidden = !!token;
+  $('#shareOn').hidden = !token;
+  $('#shareUrl').value = token ? shareUrl(token) : '';
+}
+
+async function setShare(share) {
+  try {
+    const res = await api.setShare(cur.id, share);
+    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    cur.shareToken = res.painting.shareToken ?? null;
+    refreshLists();
+    showShare();
+    if (!share) toast('Stopped sharing - the link no longer works');
+  } catch (e) { toast(e.message, true); }
+}
+
+function setupShareDialog() {
+  const dlg = $('#shareDialog');
+  $('#btnShare').onclick = () => {
+    if (!cur.id) return;
+    if (isDirty()) toast('The link shows the saved version - save your changes for them to be included.');
+    showShare();
+    dlg.showModal();
+  };
+  $('#shareClose').onclick = () => dlg.close();
+  $('#shareCreate').onclick = () => setShare(true);
+  $('#shareStop').onclick = () => {
+    if (confirm('Stop sharing? Anyone with the link will no longer be able to open it.')) setShare(false);
+  };
+  $('#shareUrl').onfocus = (e) => e.target.select();
+  $('#shareCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('#shareUrl').value); toast('Link copied'); }
+    catch { $('#shareUrl').select(); toast("Copying isn't available here - the link is selected, press Ctrl+C.", true); }
+  };
+}
+
+// Opened from a share link: show that one painting, no library, no saving.
+async function initShared() {
+  document.body.classList.add('view-only');
+  $('#shareBanner').hidden = false;
+  $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+  bindEvents();
+  let res;
+  try { res = await api.shared(SHARE_TOKEN); }
+  catch (e) {
+    $('#shareBanner').innerHTML = `<b>${esc(e.message)}</b>`;
+    $('#shareBanner').classList.add('error');
+    return;
+  }
+  $('#shareOwner').textContent = res.owner ? `from ${res.owner}` : '';
+  db = { settings: res.settings, paintings: [res.painting], artists: [] };
+  for (const el of $$('#cardPainting input, #cardPainting select, #cardSize input, #cardSize select')) el.disabled = true;
+  setCurrent(fromRecord(res.painting));
+  document.title = `${paintingLabel(res.painting) || 'Shared frame'} - Floating Frame Calculator`;
+  const ui = loadUi();
+  $('#optBlackTop').checked = !!ui.blackCheapTop;
+  setTab(ui.tab || 'cut');
 }
 
 // ---------------------------------------------------------------- Image
@@ -892,7 +1020,9 @@ function updateImageUi() {
 // ---------------------------------------------------------------- Library dialog
 function renderLibrary() {
   const q = norm($('#libSearch').value);
+  const show = $('#libMade').value;
   const rows = [...db.paintings]
+    .filter((p) => show === 'all' || (show === 'made') === !!p.madeAt)
     .filter((p) => !q || [p.sku, p.title, p.artist].some((v) => norm(v).includes(q)))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const size = (p) => {
@@ -900,13 +1030,14 @@ function renderLibrary() {
     const h = p.sameHeight ? p.leftHeight : `${f1(p.leftHeight)}/${f1(p.rightHeight)}`;
     return `${typeof w === 'number' ? f1(w) : w} × ${typeof h === 'number' ? f1(h) : h} × ${f1(p.depth)}`;
   };
-  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Updated</th><th></th></tr></thead><tbody>${
-    rows.map((p) => `<tr class="clickable" data-id="${p.id}">
-      <td><b>${esc(p.sku || '-')}</b></td><td>${esc(p.title || '-')}</td><td>${esc(p.artist || '-')}</td>
+  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Made</th><th>Updated</th><th></th></tr></thead><tbody>${
+    rows.map((p) => `<tr class="clickable${p.madeAt ? ' made' : ''}" data-id="${p.id}">
+      <td><b>${esc(p.sku || '-')}</b>${p.shareToken ? ' <span class="sub" title="Shared with a read-only link">&#128279;</span>' : ''}</td><td>${esc(p.title || '-')}</td><td>${esc(p.artist || '-')}</td>
       <td class="sub">${size(p)}</td>
+      <td>${p.madeAt ? `<span class="made-pill" title="Made on ${esc(madeDate(p.madeAt))}">&#10003; ${esc(madeDate(p.madeAt))}</span>` : '<span class="sub">-</span>'}</td>
       <td class="sub">${p.updatedAt ? new Date(p.updatedAt * 1000).toLocaleDateString() : ''}</td>
       <td><button type="button" class="link danger" data-del="${p.id}">Delete</button></td></tr>`).join('')
-    || `<tr><td colspan="6" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
+    || `<tr><td colspan="7" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
   }</tbody>`;
 }
 
@@ -981,6 +1112,7 @@ function bindEvents() {
   $('#btnSave').onclick = () => save();
   $('#btnSaveAsNew').onclick = saveAsNew;
   $('#btnReload').onclick = reloadSaved;
+  $('#btnMade').onclick = toggleMade;
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAsNew(); else save(); }
   });
@@ -1077,6 +1209,7 @@ function bindEvents() {
   $('#libClose').onclick = () => dlg.close();
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
   $('#libSearch').addEventListener('input', renderLibrary);
+  $('#libMade').addEventListener('change', renderLibrary);
   $('#libTable').addEventListener('click', (e) => {
     const del = e.target.closest('[data-del]');
     if (del) { e.stopPropagation(); deletePainting(del.dataset.del); return; }
@@ -1225,7 +1358,7 @@ function runTour() {
     { target: '[data-tab="drawing"]', title: 'Technical drawing',
       text: '<p>A drawing of the frame and every strip with its dimensions, to print or download for the workshop.</p>' },
     { target: '#btnSave', title: 'Save your work',
-      text: '<p><b>Save</b> stores the painting in your library. <b>Save as new</b> makes a copy (handy for similar paintings) and <b>New</b> starts a blank one.</p>' },
+      text: '<p><b>Save</b> stores the painting in your library. <b>Save as new</b> makes a copy (handy for similar paintings) and <b>New</b> starts a blank one. <b>Share</b> gives you a read-only link to send to someone else.</p>' },
     { target: '.quickload', title: 'Find saved paintings',
       text: '<p>Search by SKU, title or artist, or open the <b>Library</b> to see everything you’ve saved.</p>' },
     { target: '.brand-sub', title: 'That’s it!',
@@ -1275,6 +1408,7 @@ function setupInviteDialog() {
 
 async function init() {
   setupVersion();
+  if (viewOnly) return initShared();
   // Accounts are only on for the hosted version; locally this just says "off".
   let auth = { accounts: false };
   try { auth = await api.auth(); } catch { /* older server or offline - carry on */ }
@@ -1289,6 +1423,7 @@ async function init() {
 
   $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   bindEvents();
+  setupShareDialog();
   try {
     db = await api.state();
   } catch (e) {
