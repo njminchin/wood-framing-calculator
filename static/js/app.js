@@ -509,6 +509,7 @@ function updateDefaultsButtons() {
 
 function updateStatus() {
   updateDefaultsButtons();
+  $('#btnSaveAsNew').disabled = !cur.id; // only useful once a saved painting is loaded
   const el = $('#saveStatus');
   if (!cur.id) { el.textContent = 'New - not saved yet'; el.className = 'save-status dirty'; }
   else if (isDirty()) { el.textContent = 'Unsaved changes'; el.className = 'save-status dirty'; }
@@ -590,7 +591,7 @@ function newPainting() {
   $('#f-sku').focus();
 }
 
-async function save() {
+async function save(message = 'Saved') {
   readAll();
   if (!cur.sku.trim() && !cur.title.trim()) {
     toast('Enter an SKU or a title before saving.', true);
@@ -622,12 +623,42 @@ async function save() {
     saved.settings = { ...cur.settings };
     setCurrent(saved);
     refreshLists();
-    toast('Saved');
+    toast(message);
   } catch (e) {
     toast('Save failed: ' + e.message, true);
   } finally {
     btn.disabled = false;
   }
+}
+
+// Save what's on screen as a new painting; the one it was loaded from is left as it was.
+async function saveAsNew() {
+  readAll();
+  if (!cur.id) return save(); // never saved, so a normal save already makes a new painting
+  if (cur.sku.trim() && db.paintings.some((p) => norm(p.sku) === norm(cur.sku))) {
+    toast(`SKU "${cur.sku}" is already used by a saved painting. Change the SKU first, then Save as new.`, true);
+    $('#f-sku').focus();
+    $('#f-sku').select();
+    return;
+  }
+  // Give the copy its own copy of the painting image.
+  if (!cur.pendingImage && cur.image && !cur.removeImage) {
+    try {
+      const blob = await (await fetch(currentImageUrl())).blob();
+      cur.pendingImage = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      toast("Couldn't copy the painting image - the new painting won't have one.", true);
+    }
+  }
+  cur.id = null;
+  cur.image = null;
+  cur.removeImage = false;
+  await save('Saved as a new painting');
 }
 
 function readAll() {
@@ -759,9 +790,10 @@ function bindEvents() {
   });
 
   $('#btnNew').onclick = newPainting;
-  $('#btnSave').onclick = save;
+  $('#btnSave').onclick = () => save();
+  $('#btnSaveAsNew').onclick = saveAsNew;
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAsNew(); else save(); }
   });
 
   $('#btnSaveDefaults').onclick = async () => {

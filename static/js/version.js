@@ -7,6 +7,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.2.0',
+    date: '2026-09-29',
+    changes: [
+      'New "Save as new" button: load a saved painting, change the SKU (and anything else), and save it as a separate painting. The original stays as it was, and the copy gets its own copy of the painting image. Shortcut: Ctrl+Shift+S.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-09-29',
     changes: [
