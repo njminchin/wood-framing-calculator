@@ -513,13 +513,139 @@ function updateDefaultsButtons() {
   save.title = same ? 'These are already the default settings' : '';
 }
 
+// ---------------------------------------------------------------- Unsaved changes
+// Compare what's on screen with the saved copy of the painting: highlight each
+// changed value and give it a revert button showing the saved value.
+
+function savedBaseline() {
+  if (!cur || !cur.id) return null;
+  const rec = db.paintings.find((p) => p.id === cur.id);
+  return rec ? fromRecord(rec) : null;
+}
+
+const emptyish = (v) => v === null || v === undefined || v === '';
+function sameValue(a, b) {
+  if (emptyish(a) && emptyish(b)) return true;
+  if (typeof a === 'number' || typeof b === 'number') return Number(a) === Number(b);
+  if (typeof a === 'boolean' || typeof b === 'boolean') return !!a === !!b;
+  return String(a ?? '') === String(b ?? '');
+}
+
+// Bottom width / right height follow top / left while "same as" is ticked, so compare
+// the value actually in use rather than the stored (often empty) one.
+const FOLLOWS = { bottomWidth: ['sameWidth', 'topWidth'], rightHeight: ['sameHeight', 'leftHeight'] };
+function valueOf(obj, el) {
+  if (el.dataset.s) return obj.settings[el.dataset.s];
+  const k = el.dataset.p, follows = FOLLOWS[k];
+  return follows && obj[follows[0]] ? obj[follows[1]] : obj[k];
+}
+
+function describeValue(el, v) {
+  if (el.type === 'checkbox') return v ? 'ticked' : 'not ticked';
+  if (el.tagName === 'SELECT') {
+    const opt = [...el.options].find((o) => o.value === String(v));
+    return opt ? opt.textContent : String(v ?? '');
+  }
+  return emptyish(v) ? '(empty)' : String(v);
+}
+
+function revertButton(host, tip, onRevert) {
+  let btn = host.querySelector(':scope > .revert-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'revert-btn';
+    btn.textContent = '\u21BA';
+    host.append(btn);
+  }
+  btn.dataset.tip = tip;
+  btn.setAttribute('aria-label', tip);
+  btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onRevert(); };
+  return btn;
+}
+
+function clearRevert(host) {
+  host.classList.remove('changed');
+  host.querySelector(':scope > .revert-btn')?.remove();
+}
+
+function markChanges() {
+  const base = savedBaseline();
+  let count = 0;
+  for (const el of $$('[data-p], [data-s]')) {
+    const host = el.type === 'checkbox' ? el.closest('label') : el.closest('.field');
+    if (!host) continue;
+    const changed = !!base && !el.disabled && !sameValue(valueOf(cur, el), valueOf(base, el));
+    if (!changed) { clearRevert(host); continue; }
+    count++;
+    host.classList.add('changed');
+    const original = valueOf(base, el);
+    const btn = revertButton(host, `Revert to ${describeValue(el, original)}`, () => {
+      if (el.dataset.p) cur[el.dataset.p] = original;
+      else cur.settings[el.dataset.s] = original;
+      writeForm();
+      if (el.dataset.s === 'species' && viewer) viewer.setSpecies(original);
+      recompute();
+    });
+    if (el.type === 'checkbox') {
+      Object.assign(btn.style, { left: 'calc(100% + 6px)', top: '50%' });
+    } else {
+      // Inside the right-hand end of the box (clear of a select's arrow).
+      const inset = el.tagName === 'SELECT' ? 50 : 28;
+      Object.assign(btn.style, { left: `${el.offsetLeft + el.offsetWidth - inset}px`, top: `${el.offsetTop + el.offsetHeight / 2}px` });
+    }
+  }
+  // Collapsed "Diagonals" section: flag it if something inside changed.
+  for (const d of $$('details.more')) d.querySelector('summary').classList.toggle('changed', !!d.querySelector('.changed'));
+
+  // The painting image.
+  const row = $('.image-row'), thumb = $('#imgThumb');
+  const imgChanged = !!base && (!!cur.pendingImage || !!cur.removeImage);
+  thumb.classList.toggle('changed', imgChanged);
+  row.classList.toggle('changed', imgChanged);
+  if (imgChanged) {
+    count++;
+    const btn = revertButton(row, base.image ? 'Revert to the saved image' : 'Revert to no image', () => {
+      cur.pendingImage = null;
+      cur.removeImage = false;
+      updateImageUi();
+      recompute();
+    });
+    Object.assign(btn.style, { left: `${thumb.offsetLeft + thumb.offsetWidth - 14}px`, top: `${thumb.offsetTop + 12}px` });
+  } else {
+    row.querySelector(':scope > .revert-btn')?.remove();
+  }
+  return count;
+}
+
+async function reloadSaved() {
+  if (!cur.id) return;
+  if (!confirm('Discard all your unsaved changes to this painting and reload the saved version?')) return;
+  try {
+    db = await api.state();
+    refreshLists();
+  } catch (e) {
+    toast('Could not reach the server: ' + e.message, true);
+    return;
+  }
+  const rec = db.paintings.find((p) => p.id === cur.id);
+  if (!rec) { toast('This painting is no longer in your library.', true); return; }
+  setCurrent(fromRecord(rec));
+  toast('Reloaded the saved version');
+}
+
 function updateStatus() {
   updateDefaultsButtons();
   $('#btnSaveAsNew').disabled = !cur.id; // only useful once a saved painting is loaded
   const el = $('#saveStatus');
+  const changes = markChanges();
+  const dirty = !!cur.id && isDirty();
+  $('#btnReload').hidden = !dirty;
   if (!cur.id) { el.textContent = 'New - not saved yet'; el.className = 'save-status dirty'; }
-  else if (isDirty()) { el.textContent = 'Unsaved changes'; el.className = 'save-status dirty'; }
-  else { el.textContent = 'Saved'; el.className = 'save-status saved'; }
+  else if (dirty) {
+    el.textContent = changes ? `${changes} unsaved change${changes === 1 ? '' : 's'}` : 'Unsaved changes';
+    el.className = 'save-status dirty';
+  } else { el.textContent = 'Saved'; el.className = 'save-status saved'; }
 }
 
 const paintingLabel = (p) => [p.sku, p.title, p.artist].filter(Boolean).join(' — ');
@@ -854,6 +980,7 @@ function bindEvents() {
   $('#btnNew').onclick = newPainting;
   $('#btnSave').onclick = () => save();
   $('#btnSaveAsNew').onclick = saveAsNew;
+  $('#btnReload').onclick = reloadSaved;
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAsNew(); else save(); }
   });

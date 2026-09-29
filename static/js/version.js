@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.4.0',
+    date: '2026-09-29',
+    changes: [
+      'Changes you haven’t saved yet are highlighted, so you can see exactly what Save will change. The status at the top shows how many there are.',
+      'Hover over a changed value to get a ↺ button: its tooltip shows the saved value, and clicking it puts back just that one value.',
+      'New Reload button (shown when there are unsaved changes) discards all of them and reloads the saved version, after asking first.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-09-29',
     changes: [

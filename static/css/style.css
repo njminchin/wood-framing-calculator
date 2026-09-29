@@ -375,6 +375,33 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .tour-buttons { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .tour-buttons .spacer { flex: 1; }
 
+/* ---------- Unsaved changes ---------- */
+.field { position: relative; }
+.field.changed > label:first-child::after { content: " \2022 changed"; color: var(--accent); font-weight: 600; font-size: 11px; }
+.field.changed input:not([type="checkbox"]), .field.changed select { border-color: var(--accent); background: var(--accent-soft); }
+.check.changed { color: var(--accent); font-weight: 600; }
+details.more > summary.changed::after { content: " \2022 changed"; font-weight: 600; }
+.thumb.changed { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { position: relative; align-self: flex-start; }
+.image-row { position: relative; }
+.revert-btn {
+  position: absolute; z-index: 2; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent); border-radius: 50%;
+  background: var(--panel); color: var(--accent); font-size: 14px; line-height: 1;
+  opacity: 0; transform: translateY(-50%); transition: opacity .12s;
+}
+.changed:hover > .revert-btn, .changed:focus-within > .revert-btn, .revert-btn:focus { opacity: 1; }
+@media (hover: none) { .revert-btn { opacity: 1; } }
+.revert-btn:hover { background: var(--accent); color: var(--accent-ink); }
+.revert-btn::after {
+  content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); right: -4px;
+  white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  background: #22201c; color: #fff; font-size: 12px; font-weight: 400; padding: 4px 8px; border-radius: 6px;
+  opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.revert-btn:hover::after, .revert-btn:focus::after { opacity: 1; }
+
 [hidden] { display: none !important; }
 
 @media (max-width: 900px) {
