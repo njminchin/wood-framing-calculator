@@ -3,6 +3,7 @@
     python build.py        -> dist/floating-frame.pyz   (runs anywhere with Python 3.9+:
                               Windows, Raspberry Pi, Mac, Linux)
                               dist/install-pi.sh        (Raspberry Pi service installer)
+                              dist/install-vps.sh       (cloud VPS installer: Caddy, HTTPS, login)
     python build.py exe    -> the above, plus a single-file executable for THIS platform
                               (dist/FloatingFrame.exe on Windows) that needs no Python.
                               PyInstaller is installed into a private venv under ./build.
@@ -23,13 +24,15 @@ def build_pyz():
     stage = os.path.join(BUILD, "pyz")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
-    shutil.copy2(os.path.join(ROOT, "server.py"), stage)
+    for module in ("server.py", "accounts.py"):
+        shutil.copy2(os.path.join(ROOT, module), stage)
     shutil.copytree(os.path.join(ROOT, "static"), os.path.join(stage, "static"))
     os.makedirs(DIST, exist_ok=True)
     target = os.path.join(DIST, "floating-frame.pyz")
     zipapp.create_archive(stage, target, interpreter="/usr/bin/env python3", main="server:main", compressed=True)
     # Copy with LF line endings preserved (binary copy).
     shutil.copyfile(os.path.join(ROOT, "pi", "install-pi.sh"), os.path.join(DIST, "install-pi.sh"))
+    shutil.copyfile(os.path.join(ROOT, "deploy", "install-vps.sh"), os.path.join(DIST, "install-vps.sh"))
     print(f"Built {target} ({os.path.getsize(target) // 1024} KB)")
 
 

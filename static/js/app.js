@@ -9,8 +9,10 @@ const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 
-const DRAFT_KEY = 'floating-frame:draft';
 const UI_KEY = 'floating-frame:ui';
+let currentUser = null; // signed-in username when the server has accounts on
+// Unsaved work is cached per user so people sharing a browser don't see each other's drafts.
+const draftKey = () => 'floating-frame:draft' + (currentUser ? ':' + currentUser : '');
 
 const PAINTING_TEXT = ['sku', 'title', 'artist'];
 const PAINTING_NUM = ['topWidth', 'bottomWidth', 'leftHeight', 'rightHeight', 'depth', 'diagA', 'diagB'];
@@ -25,17 +27,23 @@ const api = {
     else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
     const r = await fetch(url, opts);
     const data = await r.json().catch(() => ({}));
+    if (r.status === 401 && !url.startsWith('api/auth')) {
+      saveDraft();
+      showAuth('login', 'Your session has ended - please sign in again.');
+    }
     if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
     return data;
   },
-  state: () => api.req('GET', '/api/state'),
-  saveSettings: (s) => api.req('PUT', '/api/settings', s),
-  savePainting: (p) => api.req('POST', '/api/paintings', p),
-  deletePainting: (id) => api.req('DELETE', `/api/paintings/${id}`),
-  uploadImage: (id, blob) => api.req('POST', `/api/paintings/${id}/image`, blob),
-  deleteImage: (id) => api.req('DELETE', `/api/paintings/${id}/image`),
-  addArtist: (name) => api.req('POST', '/api/artists', { name }),
-  deleteArtist: (name) => api.req('DELETE', `/api/artists/${encodeURIComponent(name)}`),
+  auth: () => api.req('GET', 'api/auth'),
+  authPost: (action, body) => api.req('POST', `api/auth/${action}`, body || {}),
+  state: () => api.req('GET', 'api/state'),
+  saveSettings: (s) => api.req('PUT', 'api/settings', s),
+  savePainting: (p) => api.req('POST', 'api/paintings', p),
+  deletePainting: (id) => api.req('DELETE', `api/paintings/${id}`),
+  uploadImage: (id, blob) => api.req('POST', `api/paintings/${id}/image`, blob),
+  deleteImage: (id) => api.req('DELETE', `api/paintings/${id}/image`),
+  addArtist: (name) => api.req('POST', 'api/artists', { name }),
+  deleteArtist: (name) => api.req('DELETE', `api/artists/${encodeURIComponent(name)}`),
 };
 
 // ---------------------------------------------------------------- State
@@ -446,7 +454,7 @@ function showViewerMsg(msg) {
 
 function currentImageUrl() {
   if (cur.pendingImage) return cur.pendingImage;
-  if (cur.image && !cur.removeImage) return `/images/${cur.image}?v=${cur.updatedAt || ''}`;
+  if (cur.image && !cur.removeImage) return `images/${cur.image}?v=${cur.updatedAt || ''}`;
   return null;
 }
 
@@ -536,16 +544,17 @@ function updateMatchHint() {
 
 // ---------------------------------------------------------------- Draft (browser cache of unsaved input)
 function saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ cur, savedSnapshot })); }
+  if (!cur) return; // nothing loaded yet (e.g. still on the sign-in screen)
+  try { localStorage.setItem(draftKey(), JSON.stringify({ cur, savedSnapshot })); }
   catch {
     // Most likely the pending image is too big for localStorage; keep the rest.
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ cur: { ...cur, pendingImage: null }, savedSnapshot })); } catch { /* ignore */ }
+    try { localStorage.setItem(draftKey(), JSON.stringify({ cur: { ...cur, pendingImage: null }, savedSnapshot })); } catch { /* ignore */ }
   }
 }
 
 function loadDraft() {
   try {
-    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    const d = JSON.parse(localStorage.getItem(draftKey()) || 'null');
     if (d && d.cur) return d;
   } catch { /* ignore */ }
   return null;
@@ -872,13 +881,90 @@ function bindEvents() {
   window.addEventListener('beforeunload', saveDraft);
 }
 
+// ---------------------------------------------------------------- Accounts (hosted version only)
+let authMode = 'login';
+
+function showAuth(mode = 'login', message = '') {
+  setAuthMode(mode);
+  $('#authError').hidden = !message;
+  $('#authError').textContent = message;
+  $('#authScreen').hidden = false;
+  $('#authUser').focus();
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  for (const b of $$('#authTabs button')) b.classList.toggle('active', b.dataset.authMode === mode);
+  for (const el of $$('[data-signup-only]')) el.hidden = mode !== 'signup';
+  $('#authPass').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  $('#authSubmit').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+  $('#authError').hidden = true;
+}
+
+function bindAuthEvents(auth) {
+  $('#authTabs').hidden = !auth.signup;
+  $('#authNote').textContent = auth.signup ? '' : 'Ask the site owner if you need an account.';
+  for (const b of $$('#authTabs button')) b.onclick = () => setAuthMode(b.dataset.authMode);
+
+  $('#authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#authError');
+    const body = { username: $('#authUser').value.trim(), password: $('#authPass').value };
+    if (authMode === 'signup') {
+      if (body.password !== $('#authPass2').value) { err.textContent = "The passwords don't match."; err.hidden = false; return; }
+      body.inviteCode = $('#authInvite').value;
+    }
+    $('#authSubmit').disabled = true;
+    try {
+      await api.authPost(authMode, body);
+      location.reload(); // start fresh with this user's library
+    } catch (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+      $('#authSubmit').disabled = false;
+    }
+  });
+
+  $('#btnSignOut').onclick = async () => {
+    saveDraft();
+    await api.authPost('logout').catch(() => {});
+    location.reload();
+  };
+
+  const dlg = $('#passwordDialog');
+  $('#btnChangePassword').onclick = () => { $('#passwordForm').reset(); $('#pwError').hidden = true; dlg.showModal(); };
+  $('#pwCancel').onclick = () => dlg.close();
+  $('#passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#pwError');
+    if ($('#pwNew').value !== $('#pwRepeat').value) { err.textContent = "The new passwords don't match."; err.hidden = false; return; }
+    try {
+      await api.authPost('password', { current: $('#pwCurrent').value, new: $('#pwNew').value });
+      dlg.close();
+      toast('Password changed. Other devices have been signed out.');
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+}
+
 async function init() {
+  // Accounts are only on for the hosted version; locally this just says "off".
+  let auth = { accounts: false };
+  try { auth = await api.auth(); } catch { /* older server or offline - carry on */ }
+  if (auth.accounts) {
+    bindAuthEvents(auth);
+    if (!auth.user) { showAuth(); return; }
+    currentUser = auth.user;
+    $('#userName').textContent = auth.user;
+    $('#userMenu').hidden = false;
+  }
+
   $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   bindEvents();
   try {
     db = await api.state();
   } catch (e) {
-    toast('Could not reach the local server - is server.py running?', true);
+    if (!$('#authScreen').hidden) return;
+    toast('Could not reach the server - is it running?', true);
   }
   refreshLists();
 

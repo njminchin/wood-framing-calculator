@@ -5,3 +5,9 @@ __pycache__/
 # Build output
 build/
 dist/
+
+# Local deploy settings (server address, SSH key location)
+deploy/deploy.local.json
+
+# Personal Claude Code approvals (not shared)
+.claude/settings.local.json

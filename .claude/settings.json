@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python build.py*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File deploy/deploy.ps1*)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File deploy/deploy.ps1*)"
+    ]
+  }
+}

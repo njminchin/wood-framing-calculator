@@ -49,6 +49,55 @@ This installs the app to `~/floating-frame` as a service that starts at boot. It
 
 The 3D view needs WebGL. Chromium on a Pi 4 or 5 handles it; a Pi 3 will be slow.
 
+### Cloud VPS (e.g. Oracle Cloud)
+
+`install-vps.sh` sets the app up for the internet:
+
+- **HTTPS:** [Caddy](https://caddyserver.com) sits in front of the app. The app itself only listens on the server (`127.0.0.1`), so everything goes through Caddy.
+- **Accounts:** everyone signs in, and each account has its own **private library** of paintings.
+- **Sign-up:** people can create their own account with an **invite code** that you share with them.
+
+The script is meant for Ubuntu 22.04/24.04 and Oracle Linux 8/9, on x86 or ARM.
+
+1. **Open ports 80 and 443 in the Oracle Cloud console.** Go to *Networking → Virtual cloud networks → your VCN → Security Lists → Default Security List → Add Ingress Rules*, and add: source CIDR `0.0.0.0/0`, IP protocol TCP, destination port range `80,443`.
+2. **Copy the files to the server:**
+   ```
+   scp dist/floating-frame.pyz dist/install-vps.sh ubuntu@<server-ip>:~
+   ```
+   On Oracle Linux the user is `opc` rather than `ubuntu`.
+3. **On the server**, run `sh install-vps.sh`. It:
+   - installs the app as a service;
+   - installs Caddy;
+   - opens ports 80 and 443 in the server's own firewall;
+   - asks you to create your own account. The first account takes over any paintings already on the server;
+   - offers to turn on sign-up and prints the invite code;
+   - prints your address.
+
+**The address.** By default it's `https://<ip-with-dashes>.sslip.io`, a free hostname that points at your IP so Caddy can get a real HTTPS certificate. For a nicer one:
+
+- **DuckDNS (free):** create a name at [duckdns.org](https://www.duckdns.org), then run `sh install-vps.sh --duckdns yourname`. It asks for your DuckDNS token and stores it on the server, readable only by root. A small service then keeps `yourname.duckdns.org` pointing at the server, at every boot and every 5 minutes, and only contacts DuckDNS when the IP has actually changed.
+- **Your own domain:** point its DNS A record at the server, then run `sh install-vps.sh --domain frames.example.com`.
+
+**A path.** To serve the app at `https://yourname.duckdns.org/framingapp/` instead of at the root, add `--path /framingapp`. The bare address then redirects there, and other paths return "Not found". Use `--path /` to go back to the root.
+
+The address, path and DuckDNS token are remembered, so later updates only need `sh install-vps.sh`.
+
+- **Inviting people:** send them the address and the invite code. They choose **Create account** on the sign-in page.
+- **Update:** copy a newer `.pyz` over and run the script again. Accounts, libraries and the invite code are all kept.
+- **One-step updates from your PC:** copy `deploy/deploy.example.json` to `deploy/deploy.local.json` (git ignores it) and fill in the server address, SSH user, key file and site address. Then run `powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1`. It builds the app, backs up the server's data to `~/backups` (keeping the last 10), installs the update without asking anything, and checks the site answers.
+- **Managing accounts:** run these on the server. Changes take effect straight away.
+  - `sh install-vps.sh --list-users` shows who has an account, and the current invite code.
+  - `sh install-vps.sh --add-user alice` creates an account for someone yourself.
+  - `sh install-vps.sh --reset-password alice` sets a new password for someone who's forgotten theirs. They're signed out everywhere.
+  - `sh install-vps.sh --remove-user alice` deletes an account. Their library stays on disk in `data/users/`.
+  - `sh install-vps.sh --new-invite-code` makes a new code. The old one stops working, but existing accounts aren't affected.
+  - `sh install-vps.sh --disable-signup` turns sign-up off.
+- **Staying signed in:** you stay signed in on each browser for a year from your last visit, including after restarts. You're signed out when you choose **Sign out**, when your password changes, or after a year without visiting.
+- **Changing your own password:** once signed in, use **Change password** at the top right of the app.
+- **Security:** passwords are stored as salted hashes, never in plain text. After 5 wrong guesses, sign-in is blocked for 15 minutes for that address and that username.
+- **Back up:** everything is in `~/floating-frame/data` on the server, e.g. `scp -r ubuntu@<server-ip>:floating-frame/data backup/`.
+- **Logs:** `sudo journalctl -u caddy -n 50` (HTTPS) and `sudo journalctl -u floating-frame -n 50` (the app).
+
 ## What it does
 
 - **Inputs** (mm): top and bottom widths, left and right heights ("same as" ticked by default), canvas depth, and optionally the two diagonals. Also the SKU, title and artist. Artist names are remembered for the dropdown.

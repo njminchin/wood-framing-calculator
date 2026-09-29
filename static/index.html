@@ -24,6 +24,11 @@
       <span id="saveStatus" class="save-status"></span>
       <button id="btnNew" type="button">New</button>
       <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
+      <div id="userMenu" class="user-menu" hidden>
+        <span id="userName" class="user-name"></span>
+        <button id="btnChangePassword" type="button" class="link">Change password</button>
+        <button id="btnSignOut" type="button" class="link">Sign out</button>
+      </div>
     </div>
   </header>
 
@@ -254,6 +259,41 @@
       <div class="table-wrap"><table class="table" id="artistTable"></table></div>
     </div>
   </dialog>
+
+  <dialog id="passwordDialog" class="dialog dialog-small">
+    <form id="passwordForm">
+      <div class="dialog-head"><h2>Change password</h2></div>
+      <div class="field"><label for="pwCurrent">Current password</label><input id="pwCurrent" type="password" autocomplete="current-password" required></div>
+      <div class="field"><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label for="pwRepeat">Repeat new password</label><input id="pwRepeat" type="password" autocomplete="new-password" minlength="8" required></div>
+      <p id="pwError" class="alert err" hidden></p>
+      <div class="button-row">
+        <button type="submit" class="primary">Change password</button>
+        <button type="button" class="link" id="pwCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Sign-in screen: only used when the server has accounts turned on (hosted version). -->
+  <div id="authScreen" class="auth-screen" hidden>
+    <form id="authForm" class="auth-card">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="1" fill="var(--wood)"/><rect x="8" y="8" width="16" height="16" fill="var(--accent)"/></svg>
+        <span>Floating Frame Calculator</span>
+      </div>
+      <div class="seg auth-tabs" id="authTabs">
+        <button type="button" data-auth-mode="login" class="active">Sign in</button>
+        <button type="button" data-auth-mode="signup">Create account</button>
+      </div>
+      <div class="field"><label for="authUser">Username</label><input id="authUser" autocomplete="username" required></div>
+      <div class="field"><label for="authPass">Password</label><input id="authPass" type="password" autocomplete="current-password" required></div>
+      <div class="field" data-signup-only hidden><label for="authPass2">Repeat password</label><input id="authPass2" type="password" autocomplete="new-password"></div>
+      <div class="field" data-signup-only hidden><label for="authInvite">Invite code</label><input id="authInvite" autocomplete="off" placeholder="From the person who sent you the link"></div>
+      <p id="authError" class="alert err" hidden></p>
+      <button type="submit" class="primary" id="authSubmit">Sign in</button>
+      <p class="help" id="authNote"></p>
+    </form>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
 
