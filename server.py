@@ -14,6 +14,7 @@ Accounts (for hosting on the internet): set FRAME_ACCOUNTS=1 and everyone must
 sign in; each user gets a private library in data/users/<id>/. Manage them with:
   --create-user NAME   --reset-password NAME   --delete-user NAME   --list-users
   --set-invite-code CODE   --new-invite-code   --disable-signup   --show-invite-code
+  --make-admin NAME   --remove-admin NAME   (admins can manage the invite code in the app)
 
 Environment: FRAME_HOST (default 0.0.0.0 = all network interfaces),
 FRAME_PORT (default 8765), FRAME_DATA, FRAME_ACCOUNTS.
@@ -223,7 +224,22 @@ class Handler(BaseHTTPRequestHandler):
             "accounts": ACCOUNTS is not None,
             "user": user["username"] if user else None,
             "signup": bool(ACCOUNTS and ACCOUNTS.invite_code),
+            "admin": bool(user and ACCOUNTS.is_admin(user)),
         }
+
+    def _admin(self):
+        """The signed-in admin, or None after replying 401/403."""
+        if ACCOUNTS is None:
+            self._error(HTTPStatus.NOT_FOUND, "Accounts are not enabled")
+            return None
+        user = self._user()
+        if user is None:
+            self._error(HTTPStatus.UNAUTHORIZED, "Please sign in")
+            return None
+        if not ACCOUNTS.is_admin(user):
+            self._error(HTTPStatus.FORBIDDEN, "Only the site admin can do that.")
+            return None
+        return user
 
     def _auth_post(self, action, body):
         if ACCOUNTS is None:
@@ -279,6 +295,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/auth":
             return self._json(self._auth_status())
+        if path == "/api/admin/invite":
+            if self._admin():
+                self._json({"inviteCode": ACCOUNTS.invite_code})
+            return
         if path == "/api/state":
             store = self._store()
             if store:
@@ -338,6 +358,17 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/auth/(login|signup|logout|password)", path)
             if m:
                 return self._auth_post(m.group(1), self._json_body())
+            if path == "/api/admin/invite":
+                if not self._admin():
+                    return
+                action = self._json_body().get("action")
+                if action == "new":
+                    ACCOUNTS.set_invite_code(random_invite_code())
+                elif action == "disable":
+                    ACCOUNTS.set_invite_code(None)
+                else:
+                    return self._error(HTTPStatus.BAD_REQUEST, "Unknown action")
+                return self._json({"inviteCode": ACCOUNTS.invite_code})
             store = self._store()
             if not store:
                 return
@@ -480,7 +511,8 @@ def account_command(argv):
             users = accounts.list_users()
             print(f"Accounts in {DATA_DIR}:")
             for u in users:
-                print(f"  {u['username']}  (library: {accounts.user_dir(u)})")
+                role = "  [admin]" if accounts.is_admin(u) else ""
+                print(f"  {u['username']}{role}  (library: {accounts.user_dir(u)})")
             if not users:
                 print("  (none)")
             code = accounts.invite_code
@@ -513,6 +545,12 @@ def account_command(argv):
         elif "--disable-signup" in argv:
             accounts.set_invite_code(None)
             print("Sign-up is closed (no invite code).")
+        elif "--make-admin" in argv:
+            user = accounts.set_admin(arg_after("--make-admin"), True)
+            print(f"'{user['username']}' is now an admin.")
+        elif "--remove-admin" in argv:
+            user = accounts.set_admin(arg_after("--remove-admin"), False)
+            print(f"'{user['username']}' is no longer an admin.")
         elif "--show-invite-code" in argv:
             code = accounts.invite_code
             print(f"Invite code: {code}" if code else "Sign-up is closed (no invite code).")

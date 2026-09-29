@@ -6,6 +6,8 @@
 - Sessions are random tokens in an HttpOnly cookie; only their SHA-256 is stored.
   They last a year from the last visit.
 - Repeated failed sign-ins (or invite codes) are throttled per IP and per username.
+- Admins can see and change the invite code in the app. The first account is
+  the admin unless someone has been made admin explicitly.
 
 Everything is kept in two small JSON files in the data folder, re-read on each
 request so that command-line changes (e.g. --create-user) apply immediately.
@@ -104,6 +106,30 @@ class Accounts:
         return os.path.join(self.data_dir, "users", user["id"])
 
     # ---- users ----------------------------------------------------------
+    def is_admin(self, user):
+        users = self._accounts()["users"]
+        if any(u.get("admin") for u in users):
+            return any(u["id"] == user["id"] and u.get("admin") for u in users)
+        return bool(users) and users[0]["id"] == user["id"]  # the owner (first account)
+
+    def set_admin(self, username, admin):
+        with self.lock:
+            data = self._accounts()
+            user = next((u for u in data["users"] if u["username"].casefold() == str(username).casefold()), None)
+            if user is None:
+                raise AccountError(f"There's no account called '{username}'.")
+            # Turn the implicit "first account is admin" into an explicit flag before changing anything.
+            if not any(u.get("admin") for u in data["users"]):
+                data["users"][0]["admin"] = True
+            if admin:
+                user["admin"] = True
+            else:
+                user.pop("admin", None)
+                if not any(u.get("admin") for u in data["users"]):
+                    raise AccountError("That would leave no admin - make someone else admin first.")
+            self._write(self.accounts_path, data)
+        return user
+
     def list_users(self):
         return self._accounts()["users"]
 

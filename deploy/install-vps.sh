@@ -17,6 +17,8 @@
 #   sh install-vps.sh --remove-user NAME       delete an account (their data is kept)
 #   sh install-vps.sh --new-invite-code        make a new code (the old one stops working)
 #   sh install-vps.sh --disable-signup         turn sign-up off
+#   sh install-vps.sh --make-admin NAME        let NAME see/change the invite code in the app
+#   sh install-vps.sh --remove-admin NAME      (the first account is the admin by default)
 #
 # Options are remembered, so a plain re-run keeps the same address and path.
 #   sh install-vps.sh --update                 update without asking anything (for scripts)
@@ -53,8 +55,10 @@ while [ $# -gt 0 ]; do
     --list-users) ACCOUNT_CMD="--list-users"; shift ;;
     --new-invite-code) ACCOUNT_CMD="--new-invite-code"; shift ;;
     --disable-signup) ACCOUNT_CMD="--disable-signup"; shift ;;
+    --make-admin) ACCOUNT_CMD="--make-admin $2"; shift 2 ;;
+    --remove-admin) ACCOUNT_CMD="--remove-admin $2"; shift 2 ;;
     --update) UNATTENDED=yes; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)"; exit 1 ;;
   esac
 done

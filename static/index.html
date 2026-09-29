@@ -14,7 +14,10 @@
   <header class="topbar">
     <div class="brand">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="1" fill="var(--wood)"/><rect x="8" y="8" width="16" height="16" fill="var(--accent)"/></svg>
-      <span>Floating Frame Calculator</span>
+      <div class="brand-text">
+        <span>Floating Frame Calculator</span>
+        <button type="button" id="btnVersion" class="version-link" title="What's new in each version"><span data-version></span><span id="versionNew" class="version-new" hidden>new</span></button>
+      </div>
     </div>
     <div class="quickload">
       <input id="quickLoad" list="dlPaintings" placeholder="Load a saved painting - search SKU, title or artist…" autocomplete="off">
@@ -26,6 +29,7 @@
       <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
       <div id="userMenu" class="user-menu" hidden>
         <span id="userName" class="user-name"></span>
+        <button id="btnInvite" type="button" class="link" hidden>Invite code</button>
         <button id="btnChangePassword" type="button" class="link">Change password</button>
         <button id="btnSignOut" type="button" class="link">Sign out</button>
       </div>
@@ -274,12 +278,44 @@
     </form>
   </dialog>
 
+  <dialog id="inviteDialog" class="dialog dialog-small">
+    <div class="dialog-head">
+      <h2>Invite code</h2>
+      <button type="button" class="link" id="inviteClose">Close</button>
+    </div>
+    <div id="inviteOpen">
+      <p class="help">Send people the site address and this code. They choose <b>Create account</b> on the sign-in page.</p>
+      <div class="invite-code" id="inviteCode"></div>
+      <div class="button-row">
+        <button type="button" id="inviteCopy">Copy invite message</button>
+        <button type="button" id="inviteNew">New code</button>
+        <button type="button" id="inviteDisable" class="link danger">Turn off sign-up</button>
+      </div>
+      <p class="help invite-note">A new code stops the old one working. Existing accounts aren't affected.</p>
+    </div>
+    <div id="inviteClosed" hidden>
+      <p class="help">Sign-up is off, so nobody new can create an account.</p>
+      <button type="button" id="inviteEnable" class="primary">Turn on sign-up</button>
+    </div>
+  </dialog>
+
+  <dialog id="changelogDialog" class="dialog dialog-medium">
+    <div class="dialog-head">
+      <h2>What's new</h2>
+      <button type="button" class="link" id="changelogClose">Close</button>
+    </div>
+    <div id="changelogList" class="changelog"></div>
+  </dialog>
+
   <!-- Sign-in screen: only used when the server has accounts turned on (hosted version). -->
   <div id="authScreen" class="auth-screen" hidden>
     <form id="authForm" class="auth-card">
       <div class="brand">
         <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="1" fill="var(--wood)"/><rect x="8" y="8" width="16" height="16" fill="var(--accent)"/></svg>
-        <span>Floating Frame Calculator</span>
+        <div class="brand-text">
+          <span>Floating Frame Calculator</span>
+          <span class="version-text" data-version></span>
+        </div>
       </div>
       <div class="seg auth-tabs" id="authTabs">
         <button type="button" data-auth-mode="login" class="active">Sign in</button>

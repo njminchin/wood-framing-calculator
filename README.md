@@ -92,6 +92,7 @@ The address, path and DuckDNS token are remembered, so later updates only need `
   - `sh install-vps.sh --remove-user alice` deletes an account. Their library stays on disk in `data/users/`.
   - `sh install-vps.sh --new-invite-code` makes a new code. The old one stops working, but existing accounts aren't affected.
   - `sh install-vps.sh --disable-signup` turns sign-up off.
+  - `sh install-vps.sh --make-admin alice` / `--remove-admin alice` choose who can see and change the invite code in the app (under **Invite code**, top right). The first account is the admin by default.
 - **Staying signed in:** you stay signed in on each browser for a year from your last visit, including after restarts. You're signed out when you choose **Sign out**, when your password changes, or after a year without visiting.
 - **Changing your own password:** once signed in, use **Change password** at the top right of the app.
 - **Security:** passwords are stored as salted hashes, never in plain text. After 5 wrong guesses, sign-in is blocked for 15 minutes for that address and that username.

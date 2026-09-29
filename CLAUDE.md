@@ -26,7 +26,8 @@ Web app for calculating the wood strips for floating picture frames: cut lists, 
 
 Once a code change is finished and checked, do all of the following without being asked. Skip it for turns that only answer a question or make no changes to the project.
 
-1. **Build:** `python build.py exe`
-2. **Commit** everything relevant with a descriptive message, and **push** to `origin main`.
-3. **Deploy** to the Oracle Cloud VM: `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/deploy.ps1 -SkipBuild`. It backs up the server's data first and checks the site answers afterwards.
-4. Report the commit and the deploy result in the reply. If any step fails, stop and say so; don't retry blindly.
+1. **Version:** add an entry at the top of `static/js/version.js` (the version shown in the app and its "What's new" list). Bump patch for fixes and small tweaks, minor for new features, major for big changes. Write the changes for the people using the app.
+2. **Build:** `python build.py exe`
+3. **Commit** everything relevant with a descriptive message that starts with the version (e.g. `v1.2.0: ...`), tag it (`git tag v1.2.0`), and **push** to `origin main` with tags (`git push origin main --tags`).
+4. **Deploy** to the Oracle Cloud VM: `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/deploy.ps1 -SkipBuild`. It backs up the server's data first and checks the site answers afterwards.
+5. Report the version, the commit and the deploy result in the reply. If any step fails, stop and say so; don't retry blindly.

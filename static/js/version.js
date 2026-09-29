@@ -1,0 +1,77 @@
+// Version history shown in the app ("What's new"), newest first.
+// The first entry is the current version. Add an entry with every release:
+//   patch (1.2.3 -> 1.2.4)  fixes and small tweaks
+//   minor (1.2.3 -> 1.3.0)  new features
+//   major (1.2.3 -> 2.0.0)  big changes to how the app works
+// Write the changes for the people using the app, not for programmers.
+
+export const CHANGELOG = [
+  {
+    version: '1.1.0',
+    date: '2026-09-29',
+    changes: [
+      'The version number is now shown under the title. Click it to see what changed in each version.',
+      'Admins (the first account on the site) can see the sign-up invite code in the app: Invite code at the top right. From there you can copy an invite message, make a new code, or turn sign-up off and on.',
+    ],
+  },
+  {
+    version: '1.0.0',
+    date: '2026-09-29',
+    changes: [
+      'Online accounts: sign in to your own private library of paintings and default settings.',
+      'New people can create an account with an invite code.',
+      'Change password and Sign out at the top right.',
+      'You stay signed in for a year from your last visit, including after restarting your computer.',
+      'The app can be hosted at its own web address (e.g. under /framingapp/).',
+    ],
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-28',
+    changes: [
+      'Click a row in the Corners & tape shims table to show that corner\'s tape setup in the sled diagram, including the number of tape layers.',
+    ],
+  },
+  {
+    version: '0.4.0',
+    date: '2026-09-28',
+    changes: [
+      'Technical drawing: the front view shows both corner-to-corner diagonals.',
+      'Technical drawing: the short point length on each strip is shown faintly, so the long point stands out.',
+      'New good wood choices for the 3D model: Jarrah, Blue Gum and Messmate.',
+    ],
+  },
+  {
+    version: '0.3.1',
+    date: '2026-09-28',
+    changes: [
+      'Australian English spelling throughout ("mitre").',
+    ],
+  },
+  {
+    version: '0.3.0',
+    date: '2026-09-28',
+    changes: [
+      'Cut list is ordered Top, Bottom, Left, Right, and identical opposite strips share one row (e.g. "Top & Bottom ×2").',
+      'New table of the assembled frame\'s diagonals, to check the glue-up is square.',
+      'The small painting sketch beside the size inputs is drawn to the proportions you enter.',
+    ],
+  },
+  {
+    version: '0.2.0',
+    date: '2026-09-28',
+    changes: [
+      'Phones, tablets and other computers on your home network can open the app.',
+    ],
+  },
+  {
+    version: '0.1.0',
+    date: '2026-09-28',
+    changes: [
+      'First version: cut list for all 8 strips, corner and mitre angles, masking-tape shims for the 45° sled, 3D model and technical drawing.',
+      'Library of saved paintings, with remembered artists and default frame settings.',
+    ],
+  },
+];
+
+export const VERSION = CHANGELOG[0].version;

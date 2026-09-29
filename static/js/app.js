@@ -1,6 +1,7 @@
 import { computeFrame, solveQuad, FENCE_FACES, onInnerSide } from './geometry.js';
 import { buildDrawing } from './drawing.js';
 import { SPECIES } from './textures.js';
+import { VERSION, CHANGELOG } from './version.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -36,6 +37,8 @@ const api = {
   },
   auth: () => api.req('GET', 'api/auth'),
   authPost: (action, body) => api.req('POST', `api/auth/${action}`, body || {}),
+  invite: () => api.req('GET', 'api/admin/invite'),
+  inviteAction: (action) => api.req('POST', 'api/admin/invite', { action }),
   state: () => api.req('GET', 'api/state'),
   saveSettings: (s) => api.req('PUT', 'api/settings', s),
   savePainting: (p) => api.req('POST', 'api/paintings', p),
@@ -946,7 +949,67 @@ function bindAuthEvents(auth) {
   });
 }
 
+// ---------------------------------------------------------------- Version / what's new
+const SEEN_VERSION_KEY = 'floating-frame:seen-version';
+
+function formatDate(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function setupVersion() {
+  for (const el of $$('[data-version]')) el.textContent = 'v' + VERSION;
+  let seen = null;
+  try { seen = localStorage.getItem(SEEN_VERSION_KEY); } catch { /* ignore */ }
+  // Flag an update the person hasn't looked at yet (not on their very first visit).
+  $('#versionNew').hidden = !seen || seen === VERSION;
+  if (!seen) try { localStorage.setItem(SEEN_VERSION_KEY, VERSION); } catch { /* ignore */ }
+
+  const dlg = $('#changelogDialog');
+  $('#btnVersion').onclick = () => {
+    $('#changelogList').innerHTML = CHANGELOG.map((v, i) => `
+      <section class="changelog-entry">
+        <h3>v${esc(v.version)} <span class="date">${esc(formatDate(v.date))}</span>${i === 0 ? '<span class="current">current</span>' : ''}</h3>
+        <ul>${v.changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+      </section>`).join('');
+    dlg.showModal();
+    $('#versionNew').hidden = true;
+    try { localStorage.setItem(SEEN_VERSION_KEY, VERSION); } catch { /* ignore */ }
+  };
+  $('#changelogClose').onclick = () => dlg.close();
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+}
+
+// Admins can see and change the sign-up invite code.
+function setupInviteDialog() {
+  const dlg = $('#inviteDialog');
+  let code = null;
+  const show = (c) => {
+    code = c;
+    $('#inviteOpen').hidden = !code;
+    $('#inviteClosed').hidden = !!code;
+    $('#inviteCode').textContent = code || '';
+  };
+  const run = async (fn) => { try { show((await fn()).inviteCode); } catch (e) { toast(e.message, true); } };
+  $('#btnInvite').hidden = false;
+  $('#btnInvite').onclick = async () => { await run(api.invite); dlg.showModal(); };
+  $('#inviteClose').onclick = () => dlg.close();
+  $('#inviteNew').onclick = () => {
+    if (confirm('Make a new invite code? The current one will stop working.')) run(() => api.inviteAction('new'));
+  };
+  $('#inviteDisable').onclick = () => {
+    if (confirm('Turn off sign-up? Nobody new will be able to create an account.')) run(() => api.inviteAction('disable'));
+  };
+  $('#inviteEnable').onclick = () => run(() => api.inviteAction('new'));
+  $('#inviteCopy').onclick = async () => {
+    const url = location.origin + location.pathname;
+    const msg = `You're invited to the Floating Frame Calculator: ${url}\nChoose "Create account" and use the invite code ${code}`;
+    try { await navigator.clipboard.writeText(msg); toast('Invite message copied'); }
+    catch { toast("Copying isn't available here - select the code and copy it instead.", true); }
+  };
+}
+
 async function init() {
+  setupVersion();
   // Accounts are only on for the hosted version; locally this just says "off".
   let auth = { accounts: false };
   try { auth = await api.auth(); } catch { /* older server or offline - carry on */ }
@@ -955,6 +1018,7 @@ async function init() {
     if (!auth.user) { showAuth(); return; }
     currentUser = auth.user;
     $('#userName').textContent = auth.user;
+    if (auth.admin) setupInviteDialog();
     $('#userMenu').hidden = false;
   }
 
