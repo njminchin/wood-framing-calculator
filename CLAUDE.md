@@ -21,10 +21,11 @@ Web app for calculating the wood strips for floating picture frames: cut lists, 
 
 - There's no test suite. Check changes by running the server on a spare port with a temporary data folder, e.g. `FRAME_PORT=8790 FRAME_HOST=127.0.0.1 FRAME_DATA="$TEMP/ff-test" python server.py --no-browser`, then use `curl` or a small Python script, and headless Chrome (`--screenshot`, `--dump-dom`) for UI checks. Delete temporary test pages afterwards.
 - Lint shell scripts with `build/venv/Scripts/shellcheck -s sh <file>`.
+- The README screenshots in `docs/screenshots/` are made by `sh docs/take-screenshots.sh`. Re-run it when a change visibly affects the cut list, tape diagram, 3D model, drawing or change highlighting.
 
 ## After every change (standing instruction from the owner)
 
-Once a code change is finished and checked, do all of the following without being asked. Skip it for turns that only answer a question or make no changes to the project.
+Once a code change is finished and checked, do all of the following without being asked. Skip it for turns that only answer a question or make no changes to the project. For changes to documentation only (README, screenshots), just commit and push; no version bump or deploy.
 
 1. **Version:** add an entry at the top of `static/js/version.js` (the version shown in the app and its "What's new" list). Bump patch for fixes and small tweaks, minor for new features, major for big changes. Write the changes for the people using the app.
 2. **Build:** `python build.py exe`

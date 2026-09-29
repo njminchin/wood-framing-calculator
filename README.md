@@ -2,6 +2,29 @@
 
 A local web app for working out the wood strips to cut for floating frames. Each frame side is an **L**: a good-wood strip (the part you see) with a cheap-wood strip (pine) glued at its base, which is screwed into the back of the painting.
 
+![The cut list: strip lengths, mitre angles and the assembled frame's diagonals](docs/screenshots/cutlist.png)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/tape.png" alt="Tape shims: a corner selected, with the tape stack drawn on the sled diagram"></td>
+    <td width="50%"><img src="docs/screenshots/model.png" alt="3D model of the finished frame with measurements"></td>
+  </tr>
+  <tr>
+    <td><b>Tape shims.</b> Click a corner to see how many layers of masking tape go where on your 45° sled.</td>
+    <td><b>3D model.</b> The finished frame with the painting in it. Rotate, zoom and show measurements.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/drawing.png" alt="Technical drawing of the frame, the L profile and each strip"></td>
+    <td width="50%"><img src="docs/screenshots/changes.png" alt="Unsaved changes highlighted, with a revert button showing the saved value"></td>
+  </tr>
+  <tr>
+    <td><b>Technical drawing.</b> The frame, the L profile and all 8 strips with dimensions, ready to print.</td>
+    <td><b>Unsaved changes.</b> Changed values are highlighted. Hover to revert one, or Reload to discard them all.</td>
+  </tr>
+</table>
+
+To retake these after changing the app, run `sh docs/take-screenshots.sh` from Git Bash. It uses a temporary example painting, so your own data isn't touched.
+
 ## Running it
 
 Requires Python 3.9+ (no packages to install).
