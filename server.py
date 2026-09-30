@@ -789,6 +789,7 @@ def main():
         return
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
+    mimetypes.add_type("application/manifest+json", ".webmanifest")
     os.makedirs(DATA_DIR, exist_ok=True)
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)

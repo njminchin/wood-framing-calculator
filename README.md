@@ -108,6 +108,7 @@ The address, path and DuckDNS token are remembered, so later updates only need `
 - **Inviting people:** send them the address and the invite code. They choose **Create account** on the sign-in page.
 - **Update:** copy a newer `.pyz` over and run the script again. Accounts, libraries and the invite code are all kept.
 - **One-step updates from your PC:** copy `deploy/deploy.example.json` to `deploy/deploy.local.json` (git ignores it) and fill in the server address, SSH user, key file and site address. Then run `powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1`. It builds the app, backs up the server's data to `~/backups` (keeping the last 10), installs the update without asking anything, and checks the site answers.
+- **Install it on a phone:** open the address in Chrome and choose **Install app** (under the title, or in Chrome's ⋮ menu). It gets its own icon and opens full screen like an app. This needs HTTPS, so it works on the VPS but not over plain `http://` on your home network.
 - **Managing accounts:** run these on the server. Changes take effect straight away.
   - `sh install-vps.sh --list-users` shows who has an account, and the current invite code.
   - `sh install-vps.sh --add-user alice` creates an account for someone yourself.

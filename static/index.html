@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Floating Frame Calculator</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' fill='%235b3a24'/%3E%3Crect x='8' y='8' width='16' height='16' fill='%23d9785a'/%3E%3C/svg%3E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#22201d" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
@@ -20,6 +24,8 @@
           <button type="button" id="btnVersion" class="version-link" title="What's new in each version"><span data-version></span><span id="versionNew" class="version-new" hidden>new</span></button>
           <span class="version-text" aria-hidden="true">·</span>
           <button type="button" id="btnTour" class="version-link" title="A quick guided tour of the app">Tour</button>
+          <span class="version-text install-sep" aria-hidden="true" hidden>·</span>
+          <button type="button" id="btnInstall" class="version-link" title="Install on this device, with its own icon" hidden>Install app</button>
         </div>
       </div>
     </div>

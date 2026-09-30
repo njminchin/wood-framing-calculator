@@ -1658,8 +1658,25 @@ function setupInviteDialog() {
   };
 }
 
+// Installable app: register the service worker, and offer "Install app" when Chrome allows it.
+function setupInstall() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* e.g. plain http on the network */ });
+  let prompt = null;
+  const show = (on) => { $('#btnInstall').hidden = !on; $('.install-sep').hidden = !on; };
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); prompt = e; if (!viewOnly) show(true); });
+  window.addEventListener('appinstalled', () => { prompt = null; show(false); toast('Installed - open it from your home screen or apps'); });
+  $('#btnInstall').onclick = async () => {
+    if (!prompt) return;
+    prompt.prompt();
+    await prompt.userChoice.catch(() => null);
+    prompt = null;
+    show(false);
+  };
+}
+
 async function init() {
   setupVersion();
+  setupInstall();
   if (viewOnly) return initShared();
   // Accounts are only on for the hosted version; locally this just says "off".
   let auth = { accounts: false };

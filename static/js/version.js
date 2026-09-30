@@ -7,6 +7,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.10.0',
+    date: '2026-09-30',
+    changes: [
+      'Install the app on your phone or computer: in Chrome, choose Install app (under the title, when it’s available, or in Chrome’s ⋮ menu). It gets its own icon and opens full screen, without the browser’s address bar.',
+      'If there’s no connection, the installed app shows a “You’re offline” page with a Try again button instead of an error.',
+    ],
+  },
+  {
     version: '1.9.0',
     date: '2026-09-30',
     changes: [
