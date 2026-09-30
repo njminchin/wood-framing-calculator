@@ -167,6 +167,7 @@
           <div id="imgThumb" class="thumb"><span>Default image</span></div>
           <div class="image-actions">
             <label class="button file-button">Upload image…<input id="imgFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>
+            <button id="imgCrop" type="button" hidden>Crop / straighten…</button>
             <button id="imgRemove" type="button" class="link" hidden>Remove image</button>
             <p id="imgNote" class="help"></p>
           </div>
@@ -380,6 +381,28 @@
         <button type="button" class="link" id="pwCancel">Cancel</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="cropDialog" class="dialog crop-dialog">
+    <div class="dialog-head">
+      <h2>Crop &amp; straighten</h2>
+      <button type="button" class="link" id="cropCancel">Cancel</button>
+    </div>
+    <p class="help">Drag the four handles onto the corners of the canvas. The <b class="crop-top-key">orange edge</b> is the top of the painting. The preview shows it straightened to the painting's measured shape.</p>
+    <div class="crop-body">
+      <div class="crop-stage"><canvas id="cropCanvas"></canvas></div>
+      <div class="crop-side">
+        <div class="crop-preview"><canvas id="cropPreview"></canvas></div>
+        <label class="check"><input type="checkbox" id="cropEnhance"> Improve lighting</label>
+        <div class="crop-tools">
+          <button type="button" id="cropRotate" title="Turn the result a quarter turn">&#8635; Rotate</button>
+          <button type="button" id="cropAuto" title="Find the canvas in the photo again">Auto-detect</button>
+          <button type="button" id="cropWhole" title="Corners at the edges of the photo">Whole photo</button>
+          <button type="button" id="cropReset" class="link" title="Put the corners back in a plain rectangle">Reset</button>
+        </div>
+        <button type="button" id="cropApply" class="primary">Apply</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="shareDialog" class="dialog dialog-small">

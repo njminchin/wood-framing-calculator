@@ -5,7 +5,7 @@ Web app for calculating the wood strips for floating picture frames: cut lists, 
 ## Layout
 
 - `server.py` is a zero-dependency Python HTTP server. `accounts.py` handles sign-in, sign-up and sessions (on only when `FRAME_ACCOUNTS=1`).
-- `static/` is the vanilla JS front end. `js/geometry.js` does all the maths; `js/app.js` is the UI; `js/viewer3d.js` is the 3D model (three.js is vendored in `static/vendor/`); `js/drawing.js` is the SVG technical drawing.
+- `static/` is the vanilla JS front end. `js/geometry.js` does all the maths; `js/app.js` is the UI; `js/viewer3d.js` is the 3D model (three.js is vendored in `static/vendor/`); `js/drawing.js` is the SVG technical drawing; `js/imagefix.js` (corner detection, perspective warp, lighting) and `js/cropper.js` (the crop dialog) straighten uploaded photos.
 - `build.py` builds `dist/floating-frame.pyz` (any OS with Python), and with `exe` also `dist/FloatingFrame.exe`.
 - `deploy/install-vps.sh` is the cloud VM installer (Caddy for HTTPS, accounts, DuckDNS, path). `deploy/deploy.ps1` builds, backs up the server data, uploads and installs in one step. `pi/install-pi.sh` is the Raspberry Pi installer.
 

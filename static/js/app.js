@@ -4,6 +4,7 @@ import { SPECIES } from './textures.js';
 import { VERSION, CHANGELOG } from './version.js';
 import { nextSku, DEFAULT_SKU_FORMAT } from './sku.js';
 import { startTour } from './tour.js';
+import { openCropper } from './cropper.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -45,7 +46,7 @@ const api = {
   saveSettings: (s) => api.req('PUT', 'api/settings', s),
   savePainting: (p) => api.req('POST', 'api/paintings', p),
   deletePainting: (id) => api.req('DELETE', `api/paintings/${id}`),
-  uploadImage: (id, blob) => api.req('POST', `api/paintings/${id}/image`, blob),
+  uploadImage: (id, blob, original = false) => api.req('POST', `api/paintings/${id}/image${original ? '?original=1' : ''}`, blob),
   deleteImage: (id) => api.req('DELETE', `api/paintings/${id}/image`),
   setShare: (id, share) => api.req('POST', `api/paintings/${id}/share`, { share }),
   shared: (token) => api.req('GET', `api/share/${encodeURIComponent(token)}`),
@@ -87,6 +88,9 @@ function blankPainting() {
     status: null, // frame status: null (not started), 'building' or 'made'; saved straight away
     buildingAt: null, madeAt: null, // when it got to that status (seconds)
     pendingImage: null, // data URL of a newly chosen image (uploaded on save)
+    imageOriginal: null, // saved original photo the image was cropped from (server filename)
+    pendingOriginal: null, // data URL of a new original photo (uploaded on save)
+    imageCrop: null, // { corners, enhance } used to make the image from the original
     removeImage: false,
     settings: { ...db.settings },
   };
@@ -94,7 +98,7 @@ function blankPainting() {
 
 function fromRecord(rec) {
   const p = blankPainting();
-  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt', 'status', 'buildingAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'imageOriginal', 'imageCrop', 'updatedAt', 'status', 'buildingAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
   p.settings = { ...db.settings, ...(rec.settings || {}) };
   return p;
 }
@@ -102,10 +106,11 @@ function fromRecord(rec) {
 function toRecord(p) {
   const r = { id: p.id || undefined, settings: p.settings };
   for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL]) r[k] = p[k];
+  r.imageCrop = p.imageCrop || null;
   return r;
 }
 
-const snapshotOf = (p) => JSON.stringify({ ...toRecord(p), pendingImage: !!p.pendingImage, removeImage: p.removeImage });
+const snapshotOf = (p) => JSON.stringify({ ...toRecord(p), pendingImage: !!p.pendingImage, pendingOriginal: !!p.pendingOriginal, removeImage: p.removeImage });
 const isDirty = () => cur && snapshotOf(cur) !== savedSnapshot;
 
 // ---------------------------------------------------------------- Form binding
@@ -628,8 +633,9 @@ function markChanges() {
   if (imgChanged) {
     count++;
     const btn = revertButton(row, base.image ? 'Revert to the saved image' : 'Revert to no image', () => {
-      cur.pendingImage = null;
+      cur.pendingImage = cur.pendingOriginal = null;
       cur.removeImage = false;
+      cur.imageCrop = base.imageCrop || null;
       updateImageUi();
       recompute();
     });
@@ -722,7 +728,7 @@ function saveDraft() {
   try { localStorage.setItem(draftKey(), JSON.stringify({ cur, savedSnapshot })); }
   catch {
     // Most likely the pending image is too big for localStorage; keep the rest.
-    try { localStorage.setItem(draftKey(), JSON.stringify({ cur: { ...cur, pendingImage: null }, savedSnapshot })); } catch { /* ignore */ }
+    try { localStorage.setItem(draftKey(), JSON.stringify({ cur: { ...cur, pendingImage: null, pendingOriginal: null }, savedSnapshot })); } catch { /* ignore */ }
   }
 }
 
@@ -783,6 +789,7 @@ async function save(message = 'Saved') {
     let res = await api.savePainting(toRecord(cur));
     cur.id = res.painting.id;
     if (cur.pendingImage) {
+      if (cur.pendingOriginal) res = await api.uploadImage(cur.id, await (await fetch(cur.pendingOriginal)).blob(), true);
       const blob = await (await fetch(cur.pendingImage)).blob();
       res = await api.uploadImage(cur.id, blob);
     } else if (cur.removeImage && cur.image) {
@@ -872,22 +879,17 @@ async function saveAsNew() {
     $('#f-sku').select();
     return;
   }
-  // Give the copy its own copy of the painting image.
+  // Give the copy its own copy of the painting image (and the photo it was cropped from).
   if (!cur.pendingImage && cur.image && !cur.removeImage) {
     try {
-      const blob = await (await fetch(currentImageUrl())).blob();
-      cur.pendingImage = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      cur.pendingImage = await urlToDataUrl(currentImageUrl());
+      if (cur.imageOriginal && !cur.pendingOriginal) cur.pendingOriginal = await urlToDataUrl(`images/${cur.imageOriginal}?v=${cur.updatedAt || ''}`);
     } catch {
       toast("Couldn't copy the painting image - the new painting won't have one.", true);
     }
   }
   cur.id = null;
-  cur.image = null;
+  cur.image = cur.imageOriginal = null;
   cur.removeImage = false;
   cur.status = cur.buildingAt = cur.madeAt = null; // the copy's frame hasn't been started
   cur.shareToken = null;
@@ -1307,6 +1309,54 @@ async function initShared() {
 }
 
 // ---------------------------------------------------------------- Image
+async function urlToDataUrl(url) {
+  const blob = await (await fetch(url)).blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// The photo to crop from: the original if we have one, otherwise the image itself
+// (paintings saved before cropping existed).
+function originalImageUrl() {
+  if (cur.pendingOriginal) return cur.pendingOriginal;
+  if (cur.imageOriginal && !cur.removeImage && !cur.pendingImage) return `images/${cur.imageOriginal}?v=${cur.updatedAt || ''}`;
+  return currentImageUrl();
+}
+
+// The painting's real proportions (width / height), for straightening to the right shape.
+function paintingAspect() {
+  const p = paintingInput();
+  const w = (p.top + p.bottom) / 2, h = (p.left + p.right) / 2;
+  return w > 0 && h > 0 ? w / h : 0;
+}
+
+// Open the crop screen on a photo; on Apply, the straightened image becomes the painting's image.
+async function cropImage(originalUrl, { isNew = false } = {}) {
+  const hasOriginal = isNew || !!cur.pendingOriginal || (!!cur.imageOriginal && !cur.pendingImage);
+  const saved = hasOriginal ? cur.imageCrop : null; // saved corners only apply to the original photo
+  let res;
+  try {
+    res = await openCropper({
+      src: originalUrl,
+      corners: saved ? saved.corners : null,
+      enhance: saved ? !!saved.enhance : loadUi().enhanceImage !== false,
+      aspect: paintingAspect(),
+    });
+  } catch (err) { toast(err.message, true); return; }
+  if (!res) return;
+  saveUi({ enhanceImage: res.enhance });
+  if (isNew || !hasOriginal) cur.pendingOriginal = originalUrl.startsWith('data:') ? originalUrl : await urlToDataUrl(originalUrl);
+  cur.pendingImage = res.dataUrl;
+  cur.imageCrop = { corners: res.corners, enhance: res.enhance };
+  cur.removeImage = false;
+  updateImageUi();
+  recompute();
+}
+
 async function downscale(file, max = 2400) {
   const url = URL.createObjectURL(file);
   try {
@@ -1326,6 +1376,7 @@ function updateImageUi() {
   t.style.backgroundImage = url ? `url("${url}")` : '';
   t.classList.toggle('has-image', !!url);
   $('#imgRemove').hidden = !url;
+  $('#imgCrop').hidden = !url || viewOnly;
   $('#imgNote').textContent = cur.pendingImage ? 'New image - saved with the painting.' : cur.removeImage ? 'Image will be removed on save.' : url ? '' : 'Shown on the 3D model.';
   if (viewer) viewer.setImage(url);
 }
@@ -1465,15 +1516,17 @@ function bindEvents() {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    try {
-      cur.pendingImage = await downscale(file);
-      cur.removeImage = false;
-      updateImageUi();
-      recompute();
-    } catch (err) { toast(err.message, true); }
+    let original;
+    try { original = await downscale(file); } catch (err) { toast(err.message, true); return; }
+    await cropImage(original, { isNew: true });
   });
+  $('#imgCrop').onclick = () => { const url = originalImageUrl(); if (url) cropImage(url); };
   $('#imgRemove').onclick = () => {
-    if (cur.pendingImage) cur.pendingImage = null;
+    if (cur.pendingImage) {
+      // Drop the new photo: back to the saved image (and how it was cropped), if any.
+      cur.pendingImage = cur.pendingOriginal = null;
+      cur.imageCrop = (savedRec() || {}).imageCrop || null;
+    }
     else if (cur.image) cur.removeImage = true;
     updateImageUi();
     recompute();

@@ -7,6 +7,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.12.0',
+    date: '2026-09-30',
+    changes: [
+      'When you upload a photo of a painting, the app now finds the canvas in it and straightens it: it removes the perspective and crops to the canvas at the painting’s measured shape. Check the four corners (drag them if needed; a magnifier helps on a phone) and press Apply.',
+      'Improve lighting evens out light that falls off across the photo and takes out colour casts. Untick it to keep the photo’s colours as they are.',
+      'The original photo is kept, so you can change the crop later with the new Crop / straighten button. It also works on images you uploaded before.',
+      'Tip: auto-detect works best with the painting on a plain background, photographed as square-on as you can.',
+    ],
+  },
+  {
     version: '1.11.0',
     date: '2026-09-30',
     changes: [

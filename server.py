@@ -110,9 +110,11 @@ class Store:
             json.dump(db, f, indent=2, ensure_ascii=False)
         os.replace(tmp, self.db_path)
 
-    def remove_images(self, painting_id):
+    def remove_images(self, painting_id, original=False):
+        """Delete a painting's image, or with original=True the original photo it was cropped from."""
+        name = painting_id + ("-orig" if original else "")
         for ext in IMAGE_TYPES.values():
-            path = os.path.join(self.image_dir, painting_id + ext)
+            path = os.path.join(self.image_dir, name + ext)
             if os.path.exists(path):
                 os.remove(path)
 
@@ -480,7 +482,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._save_painting(store, self._json_body())
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/image", path)
             if m:
-                return self._upload_image(store, m.group(1))
+                original = "original=1" in (urlparse(self.path).query or "")
+                return self._upload_image(store, m.group(1), original)
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/share", path)
             if m:
                 return self._set_share(store, m.group(1), bool(self._json_body().get("share")))
@@ -532,8 +535,9 @@ class Handler(BaseHTTPRequestHandler):
                 if painting is None:
                     return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
                 store.remove_images(pid)
+                store.remove_images(pid, original=True)
                 if image_only:
-                    painting["image"] = None
+                    painting["image"] = painting["imageOriginal"] = painting["imageCrop"] = None
                 else:
                     split_timer(db)
                     db["paintings"] = [p for p in db["paintings"] if p["id"] != pid]
@@ -560,7 +564,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = body.get("id")
             existing = next((p for p in db["paintings"] if p["id"] == pid), None) if pid else None
             record = dict(existing or {})
-            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "status", "buildingAt", "madeAt", "shareToken", "timeLog")})
+            record.update({k: v for k, v in body.items() if k not in ("id", "image", "imageOriginal", "createdAt", "status", "buildingAt", "madeAt", "shareToken", "timeLog")})
             if existing is None:
                 record["id"] = uuid.uuid4().hex[:12]
                 record["createdAt"] = time.time()
@@ -670,7 +674,8 @@ class Handler(BaseHTTPRequestHandler):
             state["painting"] = painting
             return self._json(state)
 
-    def _upload_image(self, store, pid):
+    def _upload_image(self, store, pid, original=False):
+        """The painting's image, or (original=True) the uncropped photo it was made from."""
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         ext = IMAGE_TYPES.get(ctype)
         if ext is None:
@@ -684,10 +689,11 @@ class Handler(BaseHTTPRequestHandler):
             if painting is None:
                 return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
             os.makedirs(store.image_dir, exist_ok=True)
-            store.remove_images(pid)
-            with open(os.path.join(store.image_dir, pid + ext), "wb") as f:
+            store.remove_images(pid, original)
+            name = pid + ("-orig" if original else "") + ext
+            with open(os.path.join(store.image_dir, name), "wb") as f:
                 f.write(data)
-            painting["image"] = pid + ext
+            painting["imageOriginal" if original else "image"] = name
             painting["updatedAt"] = time.time()
             store.save(db)
             state = self._state(db)

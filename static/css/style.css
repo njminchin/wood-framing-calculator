@@ -406,6 +406,30 @@ body.has-dock .toast { bottom: 76px; }
 .settings-dialog .card { box-shadow: none; margin-bottom: 12px; }
 .settings-dialog .card:last-child { margin-bottom: 0; }
 
+/* Crop & straighten */
+.crop-dialog { width: min(1060px, 96vw); }
+.crop-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: start; }
+.crop-stage { height: min(62vh, 560px); display: grid; place-items: center; background: #1c1a18; border-radius: 8px; overflow: hidden; }
+.crop-stage canvas { touch-action: none; display: block; }
+.crop-side { display: grid; gap: 10px; }
+.crop-preview { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; place-items: center; min-height: 160px; }
+.crop-preview canvas { max-width: 100%; max-height: 300px; height: auto; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.crop-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.crop-tools button { padding: 5px 10px; font-size: 12.5px; }
+.crop-top-key { color: #e0702a; }
+#cropApply { width: 100%; }
+@media (max-width: 760px) {
+  .crop-dialog { padding: 12px; max-height: 94vh; }
+  .crop-dialog > .help { font-size: 11.5px; margin-bottom: 6px; }
+  .crop-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .crop-stage { height: 42vh; }
+  .crop-preview { min-height: 0; padding: 6px; }
+  .crop-preview canvas { max-height: 100px; }
+  .crop-side { gap: 7px; }
+  /* Keep Apply in view at the bottom of the dialog. */
+  #cropApply { position: sticky; bottom: 0; box-shadow: 0 -8px 12px var(--panel); }
+}
+
 /* Share links */
 #shareUrl { margin: 4px 0 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
