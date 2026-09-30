@@ -478,14 +478,14 @@ details.accuracy { margin-top: 18px; }
 .ws-ends { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; flex: 1; }
 .ws-end { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .ws-end.cut-done { border-color: var(--ok); background: var(--ok-soft); }
-.ws-end-head { font-size: 18px; }
+.ws-end-head { font-size: 18px; display: flex; align-items: center; gap: 6px; }
 .ws-end-main { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .ws-angle { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .ws-end .tape-chip.big { font-size: 22px; padding: 6px 18px; cursor: default; }
 .ws-hint { font-size: 15px; }
 .ws-hint .len { font-size: 18px; }
 .ws-sled svg { width: 100%; max-width: 420px; height: auto; display: block; margin: 0 auto; }
-.ws-tick { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; cursor: pointer; padding: 8px 0 2px; }
+.ws-tick { display: flex; align-items: center; gap: 10px; margin-left: auto; font-size: 20px; font-weight: 700; cursor: pointer; padding: 4px 2px; }
 .ws-tick input { width: 28px; height: 28px; }
 .ws-nav { display: flex; gap: 12px; }
 .ws-nav button { flex: 1; font-size: 20px; padding: 14px; }

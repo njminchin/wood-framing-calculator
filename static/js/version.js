@@ -7,6 +7,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.14.1',
+    date: '2026-09-30',
+    changes: [
+      'In the Workshop view, the Cut tick box is now at the top right of each end’s card, where it’s easier to reach.',
+    ],
+  },
+  {
     version: '1.14.0',
     date: '2026-09-30',
     changes: [

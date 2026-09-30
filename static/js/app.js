@@ -529,11 +529,11 @@ function renderWorkshop() {
     <div class="ws-ends">${ends.map((e) => {
       const c = frame.corners[e.ci];
       return `<div class="ws-end${done[e.cut] ? ' cut-done' : ''}">
-        <div class="ws-end-head"><span class="corner-symbol big">${CORNER_SYMBOL[e.key]}</span> <b>${e.label[0].toUpperCase() + e.label.slice(1)}</b> <span class="sub">${e.key}</span></div>
+        <div class="ws-end-head"><span class="corner-symbol big">${CORNER_SYMBOL[e.key]}</span> <b>${e.label[0].toUpperCase() + e.label.slice(1)}</b> <span class="sub">${e.key}</span>
+          ${cur.id && !viewOnly ? `<label class="ws-tick"><input type="checkbox" data-cut="${e.cut}"${done[e.cut] ? ' checked' : ''}> Cut</label>` : ''}</div>
         <div class="ws-end-main"><span class="ws-angle">${f2(c.mitre)}\u00B0</span> <span class="tape-chip big ${tapeClass(c.tape)}">${tapeText(c.tape)}</span> <span class="fence-badge big ${e.fence}">${e.fence === 'right' ? 'Right' : 'Left'} fence</span></div>
         <div class="ws-hint">${lengthHint(frame, e, true)}</div>
         <div class="ws-sled">${endGuideSvg(frame, s, e)}</div>
-        ${cur.id && !viewOnly ? `<label class="ws-tick"><input type="checkbox" data-cut="${e.cut}"${done[e.cut] ? ' checked' : ''}> Cut</label>` : ''}
       </div>`;
     }).join('')}</div>
     <div class="ws-nav">
