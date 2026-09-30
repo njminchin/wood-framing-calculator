@@ -2,7 +2,7 @@
 
 A local web app for working out the wood strips to cut for floating frames. Each frame side is an **L**: a good-wood strip (the part you see) with a cheap-wood strip (pine) glued at its base, which is screwed into the back of the painting.
 
-![The cut list: strip lengths, mitre angles and the assembled frame's diagonals](docs/screenshots/cutlist.png)
+![The cut list: each piece's length with the mitre angle and tape setup for both ends](docs/screenshots/cutlist.png)
 
 <table>
   <tr>
@@ -10,7 +10,7 @@ A local web app for working out the wood strips to cut for floating frames. Each
     <td width="50%"><img src="docs/screenshots/model.png" alt="3D model of the finished frame with measurements"></td>
   </tr>
   <tr>
-    <td><b>Tape shims.</b> Click a corner to see how many layers of masking tape go where on your 45° sled.</td>
+    <td><b>Tape shims.</b> Tap an end's tape setup to see how many layers of masking tape go where on your 45° sled.</td>
     <td><b>3D model.</b> The finished frame with the painting in it. Rotate, zoom and show measurements.</td>
   </tr>
   <tr>
@@ -128,7 +128,7 @@ The address, path and DuckDNS token are remembered, so later updates only need `
 - **Inputs** (mm): top and bottom widths, left and right heights ("same as" ticked by default), canvas depth, and optionally the two diagonals. Also the SKU, title and artist. Artist names are remembered for the dropdown.
 - **Frame settings**, saved with each painting: good wood thickness, cheap wood thickness and width, whether the cheap strip sits against the inside face of the good wood or underneath it, the gap to the painting, and the lip (negative recesses the frame). Use *Save as defaults* to make them the starting values for new paintings.
 - **Cutting setup** (under Settings, the gear button at the top right): the distance of the far tape point from the blade, the thickness of one layer of masking tape, which face of the L rides the 45° fence, and the saw kerf.
-- **Cut list**: long-point and short-point lengths for all 8 strips, the corner angles and the mitre angle at each end, and the tape shim for each corner (near the blade or at the far end, and how many layers). It also shows the result you'll actually cut and the expected joint gap.
+- **Cut list**: one row per piece with the length to cut it to (the good wood's long point) and, for each end, the mitre angle and tape setup (e.g. `FAR ×3`). Tap a setup to see it on the sled diagram. Tick ends off as you cut them; the ticks are saved and cleared if the measurements change. *By tape setup* groups the cuts so each tape setup is made once, and tells you which cut sets each piece's length. *Workshop view* shows one piece at a time in big text with the sled diagram for each end. The corner angles, the result you'll actually cut and the expected joint gaps are under *Accuracy details*.
 - **3D model**: rotate and zoom it, show or hide the painting and the measurements, paint the top of the cheap wood black, see an exploded view, and upload the painting's image (a default image is used otherwise). When you upload a photo, the app finds the canvas in it and straightens it to the painting's measured shape, removing the perspective. Check or drag the four corners, and tick *Improve lighting* to even out uneven light and colour casts. The original photo is kept, so you can re-crop it any time with *Crop / straighten*. *Save PNG* saves a picture of the view.
 - **Status**: mark each frame as not started, building or made. Building and made frames get a badge with the date, the load list shows each frame's status with an icon, and the Library can filter by status.
 - **Time**: while a frame is marked Building, start the timer as you work. A dock at the bottom of the screen shows it, with Start/Stop and the frames sharing the time. When several frames are being built at once, the time is split equally between them, and it's re-split whenever one starts or finishes. A soft chime plays every 10 minutes while the timer runs (change the interval, or turn it off with 0, under Settings). On a phone, you can also turn on a notification (Settings → Build timer) that shows while the timer runs, with a Stop timer button that works even when the app is closed. Each frame shows its total and a time log, and you can add or take off time by hand. The Library shows each frame's total.

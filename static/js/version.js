@@ -7,6 +7,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.13.0',
+    date: '2026-09-30',
+    changes: [
+      'The cut list now has everything for each piece in one row: the length to cut it to, and for each end the mitre angle with its tape setup (e.g. FAR ×3). Tap a setup to see it on the sled diagram.',
+      'The short-point and cheap wood lengths have been removed from the cut list (they’re still on the technical drawing). Corner angles, errors and joint gaps are now under Accuracy details.',
+      'Tick off each end as you cut it. The ticks are saved straight away, show on all your devices, and are cleared if the measurements or cutting setup change.',
+      'New “By tape setup” view groups the cuts so you set the tape once for each group. It tells you when a cut is a piece’s first end (leave it long) or its second (cut to length).',
+      'New Workshop view: one piece at a time, full screen, with the length, angles and tape in big text and the sled diagram for each end.',
+    ],
+  },
+  {
     version: '1.12.0',
     date: '2026-09-30',
     changes: [

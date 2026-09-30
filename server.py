@@ -492,6 +492,9 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/time", path)
             if m:
                 return self._add_time(store, m.group(1), self._json_body())
+            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/cuts", path)
+            if m:
+                return self._set_cuts(store, m.group(1), self._json_body())
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/status", path)
             if m:
                 return self._set_status(store, m.group(1), self._json_body().get("status"))
@@ -564,7 +567,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = body.get("id")
             existing = next((p for p in db["paintings"] if p["id"] == pid), None) if pid else None
             record = dict(existing or {})
-            record.update({k: v for k, v in body.items() if k not in ("id", "image", "imageOriginal", "createdAt", "status", "buildingAt", "madeAt", "shareToken", "timeLog")})
+            record.update({k: v for k, v in body.items() if k not in ("id", "image", "imageOriginal", "createdAt", "status", "buildingAt", "madeAt", "shareToken", "timeLog", "cuts")})
             if existing is None:
                 record["id"] = uuid.uuid4().hex[:12]
                 record["createdAt"] = time.time()
@@ -601,6 +604,24 @@ class Handler(BaseHTTPRequestHandler):
                 shares.pop(token, None)
                 painting["shareToken"] = None
             save_shares(shares)
+            store.save(db)
+            state = self._state(db)
+            state["painting"] = painting
+            return self._json(state)
+
+    def _set_cuts(self, store, pid, body):
+        """Which cuts have been ticked off. "sig" identifies the cut plan they belong to, so
+        ticks from before the measurements changed can be ignored."""
+        done = body.get("done")
+        if not isinstance(done, dict) or len(done) > 64:
+            return self._error(HTTPStatus.BAD_REQUEST, "Expected the ticked cuts")
+        with _lock:
+            db = store.load()
+            painting = next((p for p in db["paintings"] if p["id"] == pid), None)
+            if painting is None:
+                return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
+            painting["cuts"] = {"sig": str(body.get("sig") or "")[:500],
+                                "done": {str(k)[:40]: True for k, v in done.items() if v}}
             store.save(db)
             state = self._state(db)
             state["painting"] = painting

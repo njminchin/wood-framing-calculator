@@ -53,6 +53,7 @@ const api = {
   timer: (action) => api.req('POST', 'api/timer', { action }),
   addTime: (id, minutes, note) => api.req('POST', `api/paintings/${id}/time`, { minutes, note }),
   deleteTime: (id, entry) => api.req('DELETE', `api/paintings/${id}/time/${entry}`),
+  setCuts: (id, sig, done) => api.req('POST', `api/paintings/${id}/cuts`, { sig, done }),
   setStatus: (id, status) => api.req('POST', `api/paintings/${id}/status`, { status }),
   addArtist: (name) => api.req('POST', 'api/artists', { name }),
   deleteArtist: (name) => api.req('DELETE', `api/artists/${encodeURIComponent(name)}`),
@@ -91,6 +92,7 @@ function blankPainting() {
     imageOriginal: null, // saved original photo the image was cropped from (server filename)
     pendingOriginal: null, // data URL of a new original photo (uploaded on save)
     imageCrop: null, // { corners, enhance } used to make the image from the original
+    cuts: null, // { sig, done: { 'top:TL': true, ... } } cuts ticked off, saved straight away
     removeImage: false,
     settings: { ...db.settings },
   };
@@ -98,7 +100,7 @@ function blankPainting() {
 
 function fromRecord(rec) {
   const p = blankPainting();
-  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'imageOriginal', 'imageCrop', 'updatedAt', 'status', 'buildingAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'imageOriginal', 'imageCrop', 'cuts', 'updatedAt', 'status', 'buildingAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
   p.settings = { ...db.settings, ...(rec.settings || {}) };
   return p;
 }
@@ -164,6 +166,7 @@ function recompute() {
   frame = computeFrame(paintingInput(), settingsInput());
   renderMeasureDiagram();
   renderCutList();
+  renderWorkshop();
   updateSkuPreview();
   modelDirty = drawingDirty = true;
   refreshVisiblePanel();
@@ -203,10 +206,102 @@ function refreshVisiblePanel() {
   if (activeTab === 'drawing' && drawingDirty) { renderDrawing(); drawingDirty = false; }
 }
 
-function tapeCell(t) {
-  if (t.invalid) return '<span class="tag none">check cutting setup</span>';
-  if (t.layers === 0) return '<span class="tag none">no tape</span>';
-  return `<span class="tag ${t.location}">${t.location === 'far' ? 'FAR end' : 'NEAR blade'}</span> <b>${t.layers}</b> layer${t.layers === 1 ? '' : 's'} <span class="sub">(${f2(t.shim)} mm)</span>`;
+// ---------------------------------------------------------------- Cut list
+// One row per L piece: the length to cut (good wood long point) and, for each end, the
+// mitre angle with its tape setup, so everything for a piece is together. Ends can be
+// ticked off as they're cut; "By tape setup" groups the cuts so the tape is set once.
+
+const tapeKey = (t) => (t.invalid ? 'invalid' : t.layers === 0 ? 'none' : `${t.location}${t.layers}`);
+const tapeText = (t) => (t.invalid ? 'check setup' : t.layers === 0 ? 'no tape' : `${t.location === 'far' ? 'FAR' : 'NEAR'} ×${t.layers}`);
+const tapeClass = (t) => (t.invalid || t.layers === 0 ? 'none' : t.location);
+
+// The tape setup as a chip; tapping it shows that setup on the sled diagram.
+function tapeChip(t, ci, big = false) {
+  return `<button type="button" class="tape-chip ${tapeClass(t)}${big ? ' big' : ''}${ci === selectedCorner ? ' selected' : ''}" data-corner="${ci}" title="Show this setup on the sled diagram">${tapeText(t)}</button>`;
+}
+
+function tapeWords(t) {
+  if (t.invalid) return 'check the cutting setup';
+  if (t.layers === 0) return 'no tape - straight off the 45° fence';
+  return `${t.layers} layer${t.layers === 1 ? '' : 's'} (${f2(t.shim)} mm) at the ${t.location === 'far' ? 'FAR point' : 'NEAR point, by the blade'}`;
+}
+
+// A piece's two ends in reading order: left then right for Top/Bottom, top then bottom
+// for Left/Right. Each is { strip, ci (corner index), key (e.g. 'TL'), label, cut (tick key) }.
+function pieceEnds(frame, st) {
+  const horizontal = st.key === 'top' || st.key === 'bottom';
+  const ends = st.corners.map((ci) => ({ strip: st, ci, key: frame.corners[ci].key }));
+  ends.sort((a, b) => (horizontal ? (a.key[1] === 'L' ? -1 : 1) : (a.key[0] === 'T' ? -1 : 1)));
+  const labels = horizontal ? ['left end', 'right end'] : ['top end', 'bottom end'];
+  return ends.map((e, i) => ({ ...e, label: labels[i], cut: `${st.key}:${e.key}` }));
+}
+
+// Rows in Top, Bottom, Left, Right order. Opposite pieces that come out the same (length,
+// and the angle and tape at each end) share a row, with their matching ends side by side.
+function pieceRows(frame) {
+  const byKey = Object.fromEntries(frame.strips.map((st) => [st.key, st]));
+  const sig = (e) => `${f2(frame.corners[e.ci].mitre)}|${tapeKey(frame.corners[e.ci].tape)}`;
+  const rows = [];
+  for (const [a, b, name] of [['top', 'bottom', 'Top & Bottom'], ['left', 'right', 'Left & Right']]) {
+    const A = byKey[a], B = byKey[b];
+    const ea = pieceEnds(frame, A), eb = pieceEnds(frame, B);
+    const sameLen = f1(A.good.longPoint) === f1(B.good.longPoint);
+    const pairB = sameLen && sig(ea[0]) === sig(eb[0]) && sig(ea[1]) === sig(eb[1]) ? eb
+      : sameLen && sig(ea[0]) === sig(eb[1]) && sig(ea[1]) === sig(eb[0]) ? [eb[1], eb[0]] : null;
+    if (pairB) rows.push({ name, strips: [A, B], ends: [[ea[0], pairB[0]], [ea[1], pairB[1]]] });
+    else for (const [st, ends] of [[A, ea], [B, eb]]) rows.push({ name: st.name, strips: [st], ends: ends.map((e) => [e]) });
+  }
+  return rows;
+}
+
+// ---- ticking cuts off
+// Identifies the cut plan: if lengths or tape setups change, earlier ticks no longer apply.
+function cutPlanSig(frame) {
+  return frame.strips.map((st) => `${st.key}:${f1(st.good.longPoint)}:${st.corners.map((ci) => frame.corners[ci].key + tapeKey(frame.corners[ci].tape)).join(',')}`).join('|');
+}
+const cutsDone = () => (cur.cuts && frame && frame.ok && cur.cuts.sig === cutPlanSig(frame) ? cur.cuts.done || {} : {});
+const staleCuts = () => !!(cur.cuts && frame && frame.ok && cur.cuts.sig !== cutPlanSig(frame) && Object.keys(cur.cuts.done || {}).length);
+const ALL_CUTS = () => frame.strips.flatMap((st) => pieceEnds(frame, st).map((e) => e.cut));
+
+function tickBox(e, text = '') {
+  const done = !!cutsDone()[e.cut];
+  const off = !cur.id ? ' disabled title="Save the painting to tick off cuts"' : '';
+  return `<label class="tick${done ? ' done' : ''}"><input type="checkbox" data-cut="${e.cut}"${done ? ' checked' : ''}${off}>${text ? ` <span>${text}</span>` : ''}</label>`;
+}
+
+async function setCut(key, on) {
+  if (!cur.id || !frame || !frame.ok) return;
+  const sig = cutPlanSig(frame);
+  const done = { ...cutsDone() };
+  if (on) done[key] = true; else delete done[key];
+  cur.cuts = { sig, done };
+  renderCutList();
+  renderWorkshop();
+  try {
+    const res = await api.setCuts(cur.id, sig, done);
+    setDb(res);
+    cur.cuts = res.painting.cuts || null;
+  } catch (e) { toast("Couldn't save the tick: " + e.message, true); }
+  const n = Object.keys(done).length, total = ALL_CUTS().length;
+  if (on && n === total) toast('All cuts done');
+}
+
+async function clearCuts() {
+  if (!cur.id || !confirm('Clear all the ticks for this frame?')) return;
+  cur.cuts = { sig: cutPlanSig(frame), done: {} };
+  renderCutList();
+  try { setDb(await api.setCuts(cur.id, cur.cuts.sig, {})); } catch (e) { toast(e.message, true); }
+}
+
+// Whether this cut sets the piece's length: it does once the other end has been cut.
+// In piece order (the workshop view) the second end is the length cut by default.
+function lengthHint(frame, e, pieceOrder = false) {
+  const ends = pieceEnds(frame, e.strip), done = cutsDone();
+  const other = ends.find((x) => x.cut !== e.cut);
+  const len = `<b class="len">${f1(e.strip.good.longPoint)}</b>`;
+  if (done[other.cut]) return `cut to ${len}`;
+  if (pieceOrder && !done[e.cut] && e.cut === ends[1].cut) return `then cut to ${len}`;
+  return '<span class="sub">first end - just mitre it, leave the piece long</span>';
 }
 
 function renderCutList() {
@@ -225,29 +320,61 @@ function renderCutList() {
 
   const s = settingsInput();
   const q = frame.quad;
-  const stripsRows = stripGroups(frame).map((g) => {
-    const st = g.strips[0];
-    const ends = g.ends.map((e) => `<span class="angle">${e.angle}°</span> <span class="sub">${e.keys.join(' / ')}</span>`).join(' &nbsp;·&nbsp; ');
-    const painting = g.strips.length > 1 && f1(g.strips[0].paintingLength) !== f1(g.strips[1].paintingLength)
-      ? g.strips.map((x) => f1(x.paintingLength)).join(' / ')
-      : f1(st.paintingLength);
-    return `<tr>
-      <td><b>${g.name}</b>${g.strips.length > 1 ? ' <span class="sub">×2</span>' : ''}<div class="sub">painting ${painting}</div></td>
-      <td class="num big">${f1(st.good.longPoint)}</td>
-      <td class="num">${f1(st.good.shortPoint)}</td>
-      <td class="num">${f1(st.cheap.longPoint)}</td>
-      <td class="num">${f1(st.cheap.shortPoint)}</td>
-      <td>${ends}</td>
+  const view = loadUi().cutView === 'tape' ? 'tape' : 'piece';
+  const done = cutsDone();
+  const total = ALL_CUTS().length, nDone = ALL_CUTS().filter((k) => done[k]).length;
+
+  // ---- by piece
+  const endCell = (entries) => {
+    const c = frame.corners[entries[0].ci];
+    const where = entries.length > 1 ? entries.map((e) => e.key).join(' / ') : `${entries[0].label} · ${entries[0].key}`;
+    const ticks = viewOnly ? '' : `<div class="ticks">${entries.map((e) => tickBox(e, entries.length > 1 ? e.strip.name : 'cut')).join('')}</div>`;
+    return `<td class="end-cell"><div class="end-main"><span class="angle">${f2(c.mitre)}°</span> ${tapeChip(c.tape, entries[0].ci)}</div><div class="sub">${where}</div>${ticks}</td>`;
+  };
+  const pieceTable = pieceRows(frame).map((r) => {
+    const cuts = r.ends.flat().map((e) => e.cut);
+    const rowDone = !viewOnly && cuts.every((k) => done[k]);
+    const painting = r.strips.length > 1 && f1(r.strips[0].paintingLength) !== f1(r.strips[1].paintingLength)
+      ? r.strips.map((x) => f1(x.paintingLength)).join(' / ')
+      : f1(r.strips[0].paintingLength);
+    return `<tr class="${rowDone ? 'piece-done' : ''}">
+      <td><b>${r.name}</b>${r.strips.length > 1 ? ' <span class="sub">×2</span>' : ''}<div class="sub">painting ${painting}</div></td>
+      <td class="num"><span class="len">${f1(r.strips[0].good.longPoint)}</span></td>
+      ${endCell(r.ends[0])}${endCell(r.ends[1])}
     </tr>`;
   }).join('');
+
+  // ---- by tape setup: every end, grouped so each setup is made once
+  const groups = new Map();
+  for (const key of ['top', 'bottom', 'left', 'right']) {
+    const st = frame.strips.find((x) => x.key === key);
+    for (const e of pieceEnds(frame, st)) {
+      const t = frame.corners[e.ci].tape, k = tapeKey(t);
+      if (!groups.has(k)) groups.set(k, { t, items: [] });
+      groups.get(k).items.push(e);
+    }
+  }
+  const order = (g) => (g.t.invalid ? 9e3 : g.t.layers === 0 ? 0 : (g.t.location === 'far' ? 1000 : 2000) + g.t.layers);
+  const tapeGroups = [...groups.values()].sort((a, b) => order(a) - order(b)).map((g) => {
+    const left = g.items.filter((e) => !done[e.cut]).length;
+    return `<div class="tape-group${left ? '' : ' group-done'}">
+      <div class="tape-group-head">${tapeChip(g.t, g.items[0].ci, true)} <span>${tapeWords(g.t)}</span> <span class="sub">${left ? `${left} of ${g.items.length} cut${g.items.length === 1 ? '' : 's'} left` : 'all done'}</span></div>
+      <ul class="tape-cuts">${g.items.map((e) => `<li class="${done[e.cut] ? 'cut-done' : ''}">
+        ${viewOnly ? '' : tickBox(e)}
+        <span><b>${e.strip.name}</b> ${e.label} <span class="sub">${e.key}</span></span>
+        <span class="angle">${f2(frame.corners[e.ci].mitre)}°</span>
+        <span class="cut-hint">${lengthHint(frame, e)}</span>
+      </li>`).join('')}</ul>
+    </div>`;
+  }).join('');
+
   const dg = frame.diagonals;
   const diagDiff = (d) => Math.abs(d.a - d.b);
-
   const cornerRows = frame.corners.map((c, i) => `<tr class="clickable${i === selectedCorner ? ' selected' : ''}" data-corner="${i}" title="Show this corner in the tape diagram">
       <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
       <td class="num">${f2(c.angle)}°</td>
       <td class="num angle">${f2(c.mitre)}°</td>
-      <td>${tapeCell(c.tape)}</td>
+      <td>${tapeChip(c.tape, i)}</td>
       <td class="num">${f2(c.tape.result)}°</td>
       <td class="num">${Math.abs(c.tape.error) < 0.005 ? '0.00' : (c.tape.error > 0 ? '+' : '') + f2(c.tape.error)}°</td>
       <td class="num">${c.jointOpening < 0.05 ? '<span class="sub">&lt; 0.05</span>' : f2(c.jointOpening)} <span class="sub">${c.jointOpening < 0.05 ? '' : c.openingAt === 'inner' ? 'inside' : 'outside'}</span></td>
@@ -258,6 +385,7 @@ function renderCutList() {
   const outerFence = !onInnerSide(s.fenceEdge);
   const farEffect = outerFence ? 'smaller (more acute)' : 'larger';
   const nearEffect = outerFence ? 'larger' : 'smaller (more acute)';
+  const openDetails = $('#accuracyDetails') ? $('#accuracyDetails').open : false;
 
   host.innerHTML = `
     ${alerts ? `<div class="alerts">${alerts}</div>` : ''}
@@ -268,34 +396,24 @@ function renderCutList() {
       <div class="stat"><div class="k">Canvas support</div><div class="v">${f1(frame.support)}</div><div class="s">cheap strip reaches under the canvas</div></div>
     </div>
 
-    <h3>Cut list - 4 L assemblies</h3>
-    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then mitre both ends of the L in one cut. Long point = outer (visible) edge of the good wood.</p>
-    <div class="table-wrap"><table class="table">
-      <thead>
-        <tr class="group-head"><th></th><th colspan="2" class="num">Good wood</th><th colspan="2" class="num">Cheap wood</th><th></th></tr>
-        <tr><th>Side</th><th class="num">Long point</th><th class="num">Short point</th><th class="num">Outer edge</th><th class="num">Inner edge</th><th>Mitre at each end</th></tr>
-      </thead>
-      <tbody>${stripsRows}</tbody>
-    </table></div>
-
-    <h3>Diagonals - check the glued-up frame</h3>
-    <div class="table-wrap"><table class="table">
-      <thead><tr><th>Diagonal</th><th class="num">Outside corners</th><th class="num">Inside (good wood)</th><th class="num">Painting</th></tr></thead>
-      <tbody>
-        <tr><td><b>BL → TR</b></td><td class="num big">${f1(dg.outer.a)}</td><td class="num">${f1(dg.inner.a)}</td><td class="num">${f1(q.diagA)}</td></tr>
-        <tr><td><b>TL → BR</b></td><td class="num big">${f1(dg.outer.b)}</td><td class="num">${f1(dg.inner.b)}</td><td class="num">${f1(q.diagB)}</td></tr>
-      </tbody>
-    </table></div>
-    <p class="note">Measure the assembled frame corner to corner before the glue sets. ${diagDiff(dg.outer) < 0.05
-      ? 'The two diagonals should be equal.'
-      : `This painting isn't square, so the diagonals should differ by ${f1(diagDiff(dg.outer))} mm (outside) - match these numbers rather than making them equal.`}</p>
-
-    <h3>Corners &amp; tape shims</h3>
-    <div class="table-wrap"><table class="table">
-      <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Mitre (both strips)</th><th>Tape on the 45° fence</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
-      <tbody>${cornerRows}</tbody>
-    </table></div>
-    <p class="note">Click a corner to see its tape setup in the diagram below. Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.</p>
+    <div class="cut-head">
+      <h3>Cut list</h3>
+      <div class="seg" role="group" aria-label="Arrange the cut list">
+        <button type="button" data-cut-view="piece" class="${view === 'piece' ? 'active' : ''}">By piece</button>
+        <button type="button" data-cut-view="tape" class="${view === 'tape' ? 'active' : ''}">By tape setup</button>
+      </div>
+      ${viewOnly ? '' : `<span class="cut-progress">${nDone} of ${total} cuts done${nDone ? ' · <button type="button" class="link" data-cuts-clear>clear</button>' : ''}</span>`}
+      <button type="button" class="workshop-btn" data-workshop>&#9974; Workshop view</button>
+    </div>
+    ${staleCuts() ? '<div class="alert warn">The measurements or cutting setup changed since you ticked cuts, so those ticks have been cleared.</div>' : ''}
+    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then mitre both ends of the L in one cut. Cut to the <b>long point</b>: the outer (visible) edge of the good wood. Tap a tape setup to see it on the sled diagram below.</p>
+    ${view === 'piece' ? `
+    <div class="table-wrap"><table class="table cut-table">
+      <thead><tr><th>Piece</th><th class="num">Cut to</th><th>End 1</th><th>End 2</th></tr></thead>
+      <tbody>${pieceTable}</tbody>
+    </table></div>` : `
+    <p class="note">Set the tape once for each group and make all its cuts. A piece's second cut sets its length.</p>
+    <div class="tape-groups">${tapeGroups}</div>`}
 
     <h3>Using the tape shims</h3>
     <div class="guide" id="tapeGuide">
@@ -313,55 +431,116 @@ function renderCutList() {
           <li><span class="tag near">NEAR blade</span> tape on the fence right next to the blade makes it <b>${nearEffect}</b> than 45°.</li>
           <li>Stack the layers at one point only - the strip should still touch the bare fence (or its tape) at both points.</li>
         </ul>
-        <p class="note">Painting shape ${q.method === 'diagonals' ? `fitted to your diagonal${p.diagA && p.diagB ? 's' : ''} (off by ${f1(q.diagResidual)} mm)` : 'assumed "most square". Measure its diagonals to check'}: BL→TR <b>${f1(q.diagA)}</b>, TL→BR <b>${f1(q.diagB)}</b>.</p>
       </div>
+    </div>
+
+    <h3>Diagonals - check the glued-up frame</h3>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Diagonal</th><th class="num">Outside corners</th><th class="num">Inside (good wood)</th><th class="num">Painting</th></tr></thead>
+      <tbody>
+        <tr><td><b>BL → TR</b></td><td class="num big">${f1(dg.outer.a)}</td><td class="num">${f1(dg.inner.a)}</td><td class="num">${f1(q.diagA)}</td></tr>
+        <tr><td><b>TL → BR</b></td><td class="num big">${f1(dg.outer.b)}</td><td class="num">${f1(dg.inner.b)}</td><td class="num">${f1(q.diagB)}</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Measure the assembled frame corner to corner before the glue sets. ${diagDiff(dg.outer) < 0.05
+      ? 'The two diagonals should be equal.'
+      : `This painting isn't square, so the diagonals should differ by ${f1(diagDiff(dg.outer))} mm (outside) - match these numbers rather than making them equal.`}</p>
+
+    <details class="more accuracy" id="accuracyDetails"${openDetails ? ' open' : ''}>
+      <summary>Accuracy details: corner angles, errors and joint gaps</summary>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Corner</th><th class="num">Frame angle</th><th class="num">Mitre (both strips)</th><th>Tape</th><th class="num">You'll cut</th><th class="num">Error</th><th class="num">Joint gap (mm)</th></tr></thead>
+        <tbody>${cornerRows}</tbody>
+      </table></div>
+      <p class="note">Each layer of tape (${s.tapeThickness} mm at ${s.tapeDistance} mm) turns the strip about ${f2(perLayer)}°. Layers are rounded towards the slightly more acute side so the joint closes at the visible outside corner and any gap is on the inside, hidden against the painting.
+      Painting shape ${q.method === 'diagonals' ? `fitted to your diagonal${p.diagA && p.diagB ? 's' : ''} (off by ${f1(q.diagResidual)} mm)` : 'assumed "most square" - measure its diagonals to check'}: BL→TR <b>${f1(q.diagA)}</b>, TL→BR <b>${f1(q.diagB)}</b>.</p>
+    </details>`;
+}
+
+// Which setup the tape diagram is showing, and which piece ends it cuts.
+function cornerCaption(frame) {
+  if (selectedCorner === null) {
+    return '<p class="guide-pick">Tap a tape setup in the cut list to show it here.</p>';
+  }
+  const c = frame.corners[selectedCorner], t = c.tape;
+  const ends = frame.strips.flatMap((st) => pieceEnds(frame, st)).filter((e) => e.ci === selectedCorner).map((e) => `the ${e.strip.name.toLowerCase()} piece's ${e.label}`);
+  return `<div class="guide-pick active"><b>${c.key} (${c.name})</b>: ${tapeWords(t)}, to cut <span class="angle">${f2(t.result)}°</span>
+    for the ${f2(c.mitre)}° mitre. Used for ${ends.join(' and ')}.
+    <button type="button" class="link" data-corner-clear>Show both points</button></div>`;
+}
+
+// ---------------------------------------------------------------- Workshop view
+// Full screen, one piece at a time, big enough to read from the bench.
+let workshopStep = 0;
+const WORKSHOP_PIECES = ['top', 'bottom', 'left', 'right'];
+
+function renderWorkshop() {
+  const dlg = $('#workshopDialog');
+  if (!dlg || !dlg.open) return;
+  const body = $('#workshopBody');
+  if (!frame || !frame.ok) { body.innerHTML = '<p class="ws-empty">Enter the painting\'s measurements to get the cut list.</p>'; return; }
+  const s = settingsInput();
+  const st = frame.strips.find((x) => x.key === WORKSHOP_PIECES[workshopStep]);
+  const ends = pieceEnds(frame, st);
+  const done = cutsDone();
+  const title = [cur.sku, cur.title].filter(Boolean).join(' — ');
+  body.innerHTML = `
+    <div class="ws-top">
+      <span class="ws-count">Piece ${workshopStep + 1} of 4${title ? ` · ${esc(title)}` : ''}</span>
+      <button type="button" class="ws-arrow" data-ws-step="-1" aria-label="Previous piece"${workshopStep === 0 ? ' disabled' : ''}>&larr;</button>
+      <button type="button" class="ws-arrow" data-ws-step="1" aria-label="Next piece"${workshopStep === 3 ? ' disabled' : ''}>&rarr;</button>
+      <button type="button" class="ws-close" data-ws-close>Close</button>
+    </div>
+    <div class="ws-piece">${st.name}${ends.every((e) => done[e.cut]) ? ' <span class="ws-done">✓ done</span>' : ''}</div>
+    <div class="ws-length"><span>${f1(st.good.longPoint)}</span> <small>mm, long point</small></div>
+    <div class="ws-ends">${ends.map((e) => {
+      const c = frame.corners[e.ci];
+      return `<div class="ws-end${done[e.cut] ? ' cut-done' : ''}">
+        <div class="ws-end-head"><b>${e.label[0].toUpperCase() + e.label.slice(1)}</b> <span class="sub">${e.key}</span></div>
+        <div class="ws-end-main"><span class="ws-angle">${f2(c.mitre)}°</span> <span class="tape-chip big ${tapeClass(c.tape)}">${tapeText(c.tape)}</span></div>
+        <div class="ws-hint">${lengthHint(frame, e, true)}</div>
+        <div class="ws-sled">${tapeGuideSvg(s, c)}</div>
+        ${cur.id && !viewOnly ? `<label class="ws-tick"><input type="checkbox" data-cut="${e.cut}"${done[e.cut] ? ' checked' : ''}> Cut</label>` : ''}
+      </div>`;
+    }).join('')}</div>
+    <div class="ws-nav">
+      <button type="button" data-ws-step="-1"${workshopStep === 0 ? ' disabled' : ''}>&larr; Back</button>
+      <button type="button" class="primary" data-ws-step="1"${workshopStep === 3 ? ' disabled' : ''}>Next &rarr;</button>
     </div>`;
 }
 
-// Cut list rows in Top, Bottom, Left, Right order. Opposite strips that come out
-// identical (same lengths and the same pair of mitre angles) share one row.
-function stripGroups(frame) {
-  const byKey = Object.fromEntries(frame.strips.map((st) => [st.key, st]));
-  const lengths = (st) => [st.good.longPoint, st.good.shortPoint, st.cheap.longPoint, st.cheap.shortPoint].map(f1).join('|');
-  const endsOf = (st) => [st.corners[1], st.corners[0]].map((c) => ({ angle: f2(frame.corners[c].mitre), key: frame.corners[c].key }));
-  const angles = (st) => endsOf(st).map((e) => e.angle).sort().join('|');
-  const groups = [];
-  for (const [a, b, name] of [['top', 'bottom', 'Top & Bottom'], ['left', 'right', 'Left & Right']]) {
-    const A = byKey[a], B = byKey[b];
-    if (lengths(A) === lengths(B) && angles(A) === angles(B)) {
-      // Pair up the ends that share an angle, e.g. "45.03° TL / BR".
-      const bEnds = endsOf(B);
-      const ends = endsOf(A).map((e) => {
-        const k = bEnds.findIndex((x) => x.angle === e.angle);
-        return { angle: e.angle, keys: [e.key, bEnds.splice(k, 1)[0].key] };
-      });
-      groups.push({ name, strips: [A, B], ends });
-    } else {
-      for (const st of [A, B]) groups.push({ name: st.name, strips: [st], ends: endsOf(st).map((e) => ({ angle: e.angle, keys: [e.key] })) });
-    }
-  }
-  return groups;
+function openWorkshop() {
+  // Start at the first piece that still has cuts to make.
+  const done = cutsDone();
+  const i = WORKSHOP_PIECES.findIndex((k) => pieceEnds(frame, frame.strips.find((x) => x.key === k)).some((e) => !done[e.cut]));
+  workshopStep = i < 0 ? 0 : i;
+  $('#workshopDialog').showModal();
+  renderWorkshop();
 }
 
-// Which corner the tape diagram is showing, and which strip ends that setup cuts.
-function cornerCaption(frame) {
-  if (selectedCorner === null) {
-    return '<p class="guide-pick">Click a row in the corners table above to show that corner\'s tape setup here.</p>';
-  }
-  const c = frame.corners[selectedCorner], t = c.tape;
-  const ends = frame.strips.filter((st) => st.corners.includes(selectedCorner)).map((st) => `${st.name.toLowerCase()} strip`);
-  const setup = t.layers === 0
-    ? 'no tape - cut it straight off the 45° fence'
-    : `<b>${t.layers} layer${t.layers === 1 ? '' : 's'}</b> of tape (${f2(t.shim)} mm) at the <b>${t.location === 'far' ? 'FAR point' : 'NEAR point, by the blade'}</b>`;
-  return `<div class="guide-pick active"><b>${c.key} (${c.name})</b>: ${setup}, to cut <span class="angle">${f2(t.result)}°</span>
-    for the ${f2(c.mitre)}° mitre. Used for the ${c.key} end of the ${ends.join(' and the ')}.
-    <button type="button" class="link" data-corner-clear>Show both points</button></div>`;
+function setupWorkshop() {
+  const dlg = $('#workshopDialog');
+  dlg.addEventListener('click', (e) => {
+    const step = e.target.closest('[data-ws-step]');
+    if (step) { workshopStep = Math.min(3, Math.max(0, workshopStep + Number(step.dataset.wsStep))); renderWorkshop(); return; }
+    if (e.target.closest('[data-ws-close]')) dlg.close();
+  });
+  dlg.addEventListener('change', (e) => {
+    const box = e.target.closest('[data-cut]');
+    if (box) setCut(box.dataset.cut, box.checked);
+  });
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' && workshopStep < 3) { workshopStep++; renderWorkshop(); }
+    if (e.key === 'ArrowLeft' && workshopStep > 0) { workshopStep--; renderWorkshop(); }
+  });
 }
 
 // Bird's-eye view of the 45° sled: blade at the top, the fence running away from
 // the kerf down to the right, and the L strip against one side of it. With a
 // corner, only that corner's tape point is lit and its stack of layers is drawn.
+let sledSeq = 0;
 function tapeGuideSvg(s, corner = null) {
+  const uid = ++sledSeq; // unique ids: the diagram can appear more than once
   const c = Math.SQRT1_2;
   const K = 150, AY = 112; // kerf x, and where the fence's blade-side face meets the kerf
   // P(a, o): a along the fence away from the blade, o off the fence's blade-side
@@ -434,12 +613,12 @@ function tapeGuideSvg(s, corner = null) {
     const q = P(b.over ? 60 : 75, (b.oa + b.ob) / 2);
     return `<text class="g-band-t" x="${q[0]}" y="${q[1]}" text-anchor="middle" dominant-baseline="middle" transform="${rot(q)}">${b.label}</text>`;
   };
-  return `<svg viewBox="0 0 330 300" role="img" aria-label="Sled seen from above: blade, 45 degree fence and strip">
-    <defs><clipPath id="sledClip"><rect x="6" y="46" width="318" height="248" rx="6"/></clipPath>
-      <marker id="gArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" class="g-arrowhead"/></marker></defs>
+  return `<svg class="sled" viewBox="0 0 330 300" role="img" aria-label="Sled seen from above: blade, 45 degree fence and strip">
+    <defs><clipPath id="sledClip${uid}"><rect x="6" y="46" width="318" height="248" rx="6"/></clipPath>
+      <marker id="gArrow${uid}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" class="g-arrowhead"/></marker></defs>
     <rect class="g-sled" x="6" y="46" width="318" height="248" rx="6"/>
     <line class="g-kerf" x1="${K}" y1="46" x2="${K}" y2="294"/>
-    <g clip-path="url(#sledClip)">
+    <g clip-path="url(#sledClip${uid})">
       <polygon class="g-offcut" points="${pts(offcut)}"/>
       <polygon class="g-fence" points="${pts(fence)}"/>
       ${bands.map((b) => `<polygon class="g-${b.k}${b.over ? ' g-over' : ''}" points="${pts(band(b))}"/>`).join('')}
@@ -456,7 +635,7 @@ function tapeGuideSvg(s, corner = null) {
     <circle class="${lit('far') ? 'g-far' : 'g-off'}" cx="${far[0]}" cy="${far[1]}" r="5.5"/>
     ${pointLabel('far', farL[0], farL[1] + 4, `FAR · ${f1(s.tapeDistance)} mm`)}
     ${title}
-    <line class="g-arrow" x1="28" y1="270" x2="28" y2="215" marker-end="url(#gArrow)"/>
+    <line class="g-arrow" x1="28" y1="270" x2="28" y2="215" marker-end="url(#gArrow${uid})"/>
     <text class="g-muted" x="28" y="284" text-anchor="middle">feed</text>
   </svg>`;
 }
@@ -892,6 +1071,7 @@ async function saveAsNew() {
   cur.image = cur.imageOriginal = null;
   cur.removeImage = false;
   cur.status = cur.buildingAt = cur.madeAt = null; // the copy's frame hasn't been started
+  cur.cuts = null;
   cur.shareToken = null;
   await save('Saved as a new painting');
 }
@@ -1534,13 +1714,22 @@ function bindEvents() {
 
   // Tabs
   for (const b of $$('.tabs button')) b.onclick = () => setTab(b.dataset.tab);
+  $('#panel-cut').addEventListener('change', (e) => {
+    const box = e.target.closest('[data-cut]');
+    if (box) setCut(box.dataset.cut, box.checked);
+  });
   $('#panel-cut').addEventListener('click', (e) => {
-    const row = e.target.closest('tr[data-corner]');
-    if (row || e.target.closest('[data-corner-clear]')) {
-      const i = row ? Number(row.dataset.corner) : null;
+    if (e.target.closest('label.tick, input')) return; // ticking a cut, handled above
+    const view = e.target.closest('[data-cut-view]');
+    if (view) { saveUi({ cutView: view.dataset.cutView }); renderCutList(); return; }
+    if (e.target.closest('[data-workshop]')) { openWorkshop(); return; }
+    if (e.target.closest('[data-cuts-clear]')) { clearCuts(); return; }
+    const pick = e.target.closest('[data-corner]');
+    if (pick || e.target.closest('[data-corner-clear]')) {
+      const i = pick ? Number(pick.dataset.corner) : null;
       selectedCorner = i === selectedCorner ? null : i;
       renderCutList();
-      if (row) $('#tapeGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (pick) $('#tapeGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       return;
     }
     const btn = e.target.closest('[data-fence-edge]');
@@ -1732,7 +1921,7 @@ function runTour() {
     { target: '#btnSettings', title: 'Settings',
       text: '<p>Tell the app how you cut: how far the far tape point is from the blade, how thick one layer of tape is, and which face of the L goes against the 45° fence. This is also where you set how SKUs are numbered.</p>' },
     { target: '#panel-cut', before: () => setTab('cut'), title: 'The cut list',
-      text: '<p>Once the painting is measured, this shows the length of all 8 strips (cut to the <b>long point</b>), the mitre angle at each end, and how many layers of masking tape to put where for each corner.</p><p>Click a corner to see its setup on the sled diagram.</p>' },
+      text: '<p>Once the painting is measured, this shows the length of all 8 strips (cut to the <b>long point</b>), the mitre angle at each end, and how many layers of masking tape to put where for each corner.</p><p>Each piece shows the length to cut and, for each end, the mitre angle and tape setup. Tap a setup to see it on the sled diagram, tick ends off as you cut them, or open the Workshop view for big, one-piece-at-a-time instructions.</p>' },
     { target: '[data-tab="model"]', title: '3D model',
       text: '<p>See the finished frame from any angle, show the measurements, and upload a photo of the painting to see it in the frame.</p>' },
     { target: '[data-tab="drawing"]', title: 'Technical drawing',
@@ -1805,6 +1994,7 @@ function setupInstall() {
 async function init() {
   setupVersion();
   setupInstall();
+  setupWorkshop();
   if (viewOnly) return initShared();
   // Accounts are only on for the hosted version; locally this just says "off".
   let auth = { accounts: false };

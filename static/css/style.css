@@ -253,39 +253,40 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 @media (prefers-color-scheme: dark) { .angle { color: #ff8a80; } }
 
 .guide { display: grid; grid-template-columns: minmax(260px, 440px) 1fr; gap: 18px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
-.guide svg { width: 100%; height: auto; color: var(--text); }
-.guide svg text { font-size: 10.5px; }
+.guide svg { width: 100%; height: auto; }
+.sled { color: var(--text); }
+.sled text { font-size: 10.5px; }
 .guide-label { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
 .guide-toggle { margin-bottom: 10px; flex-wrap: wrap; }
-.guide .g-over { opacity: .8; stroke-dasharray: 4 2; }
-.guide .g-sled { fill: var(--panel-2); stroke: var(--line-strong); }
-.guide .g-kerf { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
-.guide .g-fence { fill: var(--fence-fill); stroke: var(--text); stroke-width: 1; }
-.guide .g-good { fill: var(--good-fill); stroke: var(--text); stroke-width: .8; }
-.guide .g-cheap { fill: var(--cheap-fill); stroke: var(--text); stroke-width: .8; }
-.guide .g-offcut { fill: none; stroke: var(--muted); stroke-width: .8; stroke-dasharray: 3 2; }
-.guide .g-band-t, .guide .g-fence-t { fill: var(--text); font-size: 9px; }
-.guide .g-ink { fill: var(--text); }
-.guide .g-muted { fill: var(--muted); font-size: 9.5px; }
-.guide .g-tip { fill: var(--text); }
-.guide .g-blade { fill: var(--blade); }
-.guide .g-blade-t { fill: var(--blade); }
-.guide .g-near { fill: var(--near); }
-.guide .g-far { fill: var(--far); }
-.guide .g-near-t { fill: var(--near); font-weight: 700; }
-.guide .g-far-t { fill: var(--far); font-weight: 700; }
-.guide .g-off { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 2 2; }
-.guide .g-off-t { fill: var(--muted); }
-.guide .g-count { font-weight: 800; font-size: 13px; }
-.guide .g-tape { fill: var(--tape); stroke: var(--text); stroke-width: .6; }
-.guide .g-tape-line { stroke: var(--text); stroke-width: .4; opacity: .7; }
-.guide .g-title { fill: var(--text); font-weight: 700; font-size: 13px; }
+.sled .g-over { opacity: .8; stroke-dasharray: 4 2; }
+.sled .g-sled { fill: var(--panel-2); stroke: var(--line-strong); }
+.sled .g-kerf { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.sled .g-fence { fill: var(--fence-fill); stroke: var(--text); stroke-width: 1; }
+.sled .g-good { fill: var(--good-fill); stroke: var(--text); stroke-width: .8; }
+.sled .g-cheap { fill: var(--cheap-fill); stroke: var(--text); stroke-width: .8; }
+.sled .g-offcut { fill: none; stroke: var(--muted); stroke-width: .8; stroke-dasharray: 3 2; }
+.sled .g-band-t, .sled .g-fence-t { fill: var(--text); font-size: 9px; }
+.sled .g-ink { fill: var(--text); }
+.sled .g-muted { fill: var(--muted); font-size: 9.5px; }
+.sled .g-tip { fill: var(--text); }
+.sled .g-blade { fill: var(--blade); }
+.sled .g-blade-t { fill: var(--blade); }
+.sled .g-near { fill: var(--near); }
+.sled .g-far { fill: var(--far); }
+.sled .g-near-t { fill: var(--near); font-weight: 700; }
+.sled .g-far-t { fill: var(--far); font-weight: 700; }
+.sled .g-off { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.sled .g-off-t { fill: var(--muted); }
+.sled .g-count { font-weight: 800; font-size: 13px; }
+.sled .g-tape { fill: var(--tape); stroke: var(--text); stroke-width: .6; }
+.sled .g-tape-line { stroke: var(--text); stroke-width: .4; opacity: .7; }
+.sled .g-title { fill: var(--text); font-weight: 700; font-size: 13px; }
 .guide-pick { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
 .guide-pick.active { color: var(--text); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
 .table tbody tr.selected td { background: var(--accent-soft); }
 .table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
-.guide .g-arrow { stroke: var(--muted); stroke-width: 1.5; }
-.guide .g-arrowhead { fill: var(--muted); }
+.sled .g-arrow { stroke: var(--muted); stroke-width: 1.5; }
+.sled .g-arrowhead { fill: var(--muted); }
 .guide ul { margin: 6px 0 0; padding-left: 18px; }
 .guide li { margin-bottom: 4px; }
 .note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
@@ -405,6 +406,85 @@ body.has-dock .toast { bottom: 76px; }
 .icon-button.changed::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .settings-dialog .card { box-shadow: none; margin-bottom: 12px; }
 .settings-dialog .card:last-child { margin-bottom: 0; }
+
+/* Cut list: pieces with their ends */
+.cut-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 18px 0 8px; }
+.cut-head h3 { margin: 0; }
+.cut-progress { font-size: 12.5px; color: var(--muted); }
+.cut-progress .link { font-size: 12.5px; padding: 0; }
+.workshop-btn { margin-left: auto; }
+.cut-table td { vertical-align: top; }
+.cut-table .len, .tape-cuts .len { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.end-cell { white-space: normal !important; }
+.end-main { display: flex; align-items: center; gap: 8px; }
+.end-main .angle { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ticks { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+.tick { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.tick input { width: 17px; height: 17px; }
+.tick.done { color: var(--ok); font-weight: 600; }
+.cut-table tr.piece-done td { background: color-mix(in srgb, var(--ok-soft) 60%, transparent); }
+.cut-table tr.piece-done .len { color: var(--muted); text-decoration: line-through; }
+.tape-chip { font: inherit; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 99px; border: 1.5px solid transparent; cursor: pointer; white-space: nowrap; }
+.tape-chip.far { background: #e1ecff; color: #1b4fa8; }
+.tape-chip.near { background: #ffe6d6; color: #a2461b; }
+.tape-chip.none { background: var(--panel-2); color: var(--muted); border-color: var(--line); }
+.tape-chip:hover { border-color: currentColor; }
+.tape-chip.selected { border-color: currentColor; box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px currentColor; }
+.tape-chip.big { font-size: 15px; padding: 4px 14px; }
+@media (prefers-color-scheme: dark) {
+  .tape-chip.far { background: #1f2f4d; color: #9fc0ff; }
+  .tape-chip.near { background: #45291a; color: #ffb58c; }
+}
+.tape-groups { display: grid; gap: 10px; }
+.tape-group { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 14px; }
+.tape-group.group-done { opacity: .65; }
+.tape-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 13px; margin-bottom: 6px; }
+.tape-group-head .sub { margin-left: auto; }
+.tape-cuts { list-style: none; margin: 0; padding: 0; }
+.tape-cuts li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.tape-cuts li .cut-hint { grid-column: 2 / 4; font-size: 12.5px; }
+.tape-cuts li .angle { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tape-cuts li .len { font-size: 15px; }
+.tape-cuts li.cut-done > span { color: var(--muted); text-decoration: line-through; }
+details.accuracy { margin-top: 18px; }
+/* Phones: each piece as a small card - name and length, then its two ends side by side. */
+@media (max-width: 640px) {
+  .cut-table thead { display: none; }
+  .cut-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+  .cut-table tbody tr:last-child { border-bottom: none; }
+  .cut-table td { border-bottom: none; padding: 7px 10px; }
+  .cut-table td:nth-child(2) { text-align: right; }
+  .cut-table .end-main { flex-wrap: wrap; gap: 4px 8px; }
+}
+
+/* Workshop view */
+.workshop { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: none; background: var(--bg); color: var(--text); }
+.workshop::backdrop { background: var(--bg); }
+#workshopBody { box-sizing: border-box; min-height: 100%; padding: 14px clamp(12px, 3vw, 32px) 20px; display: flex; flex-direction: column; gap: 10px; }
+.ws-top { display: flex; align-items: center; gap: 10px; }
+.ws-count { color: var(--muted); font-size: 14px; }
+.ws-arrow { margin-left: auto; font-size: 18px; padding: 6px 14px; }
+.ws-arrow + .ws-arrow { margin-left: 0; }
+.ws-close { font-size: 15px; padding: 8px 16px; }
+.ws-piece { font-size: clamp(28px, 6vw, 44px); font-weight: 800; line-height: 1.1; }
+.ws-done { font-size: .55em; color: var(--ok); vertical-align: middle; }
+.ws-length span { font-size: clamp(48px, 12vw, 96px); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.ws-length small { font-size: 16px; color: var(--muted); }
+.ws-ends { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; flex: 1; }
+.ws-end { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.ws-end.cut-done { border-color: var(--ok); background: var(--ok-soft); }
+.ws-end-head { font-size: 18px; }
+.ws-end-main { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.ws-angle { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ws-end .tape-chip.big { font-size: 22px; padding: 6px 18px; cursor: default; }
+.ws-hint { font-size: 15px; }
+.ws-hint .len { font-size: 18px; }
+.ws-sled svg { width: 100%; max-width: 420px; height: auto; display: block; margin: 0 auto; }
+.ws-tick { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; cursor: pointer; padding: 8px 0 2px; }
+.ws-tick input { width: 28px; height: 28px; }
+.ws-nav { display: flex; gap: 12px; }
+.ws-nav button { flex: 1; font-size: 20px; padding: 14px; }
+.ws-empty { font-size: 18px; }
 
 /* Crop & straighten */
 .crop-dialog { width: min(1060px, 96vw); }
