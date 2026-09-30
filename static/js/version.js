@@ -7,6 +7,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.2',
+    date: '2026-09-30',
+    changes: [
+      'On a phone, the buttons at the top now all fit on screen: the search box, the status and the buttons each get their own row. The top bar also scrolls away with the page, leaving more room for the painting.',
+    ],
+  },
+  {
     version: '1.6.1',
     date: '2026-09-30',
     changes: [

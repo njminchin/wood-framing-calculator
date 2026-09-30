@@ -137,6 +137,7 @@ input.invalid { border-color: var(--err-ink); }
 .changelog-entry li { margin: 3px 0; }
 .quickload { flex: 1; display: flex; gap: 8px; min-width: 260px; max-width: 620px; }
 .actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.status-group { display: flex; align-items: center; gap: 8px; }
 .save-status { color: var(--muted); font-size: 12.5px; }
 .save-status.dirty { color: var(--accent); }
 .save-status.saved { color: var(--ok); }
@@ -448,6 +449,19 @@ details.more > summary.changed::after { content: " \2022 changed"; font-weight: 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .guide { grid-template-columns: 1fr; }
+}
+
+/* Phones: search on its own row, then the status, then the buttons sharing the width. */
+@media (max-width: 640px) {
+  .topbar { position: static; gap: 8px; padding: 8px 12px; }
+  .quickload { flex-basis: 100%; min-width: 0; }
+  .actions { flex-wrap: wrap; width: 100%; margin-left: 0; gap: 6px; }
+  .status-group { flex-basis: 100%; min-height: 22px; }
+  .status-group:not(:has(:not([hidden]):not(:empty))) { display: none; }
+  .actions > button { flex: 1 1 auto; padding: 7px 8px; }
+  .actions > .icon-button { flex: 0 0 auto; }
+  .user-menu { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; padding-left: 0; border-left: none; }
+  .share-banner { flex-basis: 100%; }
 }
 
 @media print {
