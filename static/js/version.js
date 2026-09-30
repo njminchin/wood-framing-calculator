@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.9.0',
+    date: '2026-09-30',
+    changes: [
+      'Choose how often the build timer chimes in Settings, under the new Build timer section. 0 turns the chime off.',
+      'The bell (mute) button has been removed from the timer dock.',
+      'The Settings button now shows a proper gear icon.',
+    ],
+  },
+  {
     version: '1.8.2',
     date: '2026-09-30',
     changes: [

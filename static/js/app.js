@@ -518,8 +518,8 @@ function download(name, blob) {
 }
 
 // ---------------------------------------------------------------- Status / lists
-// SKU numbering is a personal preference saved straight to the defaults, not a frame setting.
-const SKU_SETTINGS = ['skuFormat', 'skuPrefix'];
+// SKU numbering and the timer chime are personal preferences saved straight to the defaults, not frame settings.
+const SKU_SETTINGS = ['skuFormat', 'skuPrefix', 'chimeMinutes'];
 
 function settingsMatchDefaults() {
   return Object.keys(db.settings).filter((k) => !SKU_SETTINGS.includes(k)).every((k) => String(cur.settings[k] ?? '') === String(db.settings[k] ?? ''));
@@ -843,18 +843,22 @@ let skuSaveTimer;
 function bindSkuSettings() {
   $('#sku-format').value = db.settings.skuFormat || DEFAULT_SKU_FORMAT;
   $('#sku-prefix').value = db.settings.skuPrefix ?? '';
+  $('#chime-minutes').value = db.settings.chimeMinutes ?? 10;
   const onChange = () => {
     db.settings.skuFormat = $('#sku-format').value.trim() || DEFAULT_SKU_FORMAT;
     db.settings.skuPrefix = $('#sku-prefix').value.trim();
+    const chime = parseFloat($('#chime-minutes').value);
+    db.settings.chimeMinutes = Number.isFinite(chime) && chime >= 0 ? Math.min(chime, 240) : 10;
     updateSkuPreview();
     clearTimeout(skuSaveTimer);
     skuSaveTimer = setTimeout(async () => {
       try { db.settings = (await api.saveSettings(db.settings)).settings; }
-      catch (e) { toast("Couldn't save the SKU format: " + e.message, true); }
+      catch (e) { toast("Couldn't save your settings: " + e.message, true); }
     }, 700);
   };
   $('#sku-format').addEventListener('input', onChange);
   $('#sku-prefix').addEventListener('input', onChange);
+  $('#chime-minutes').addEventListener('input', onChange);
   $('#btnGenerateSku').onclick = generateSku;
 }
 
@@ -986,11 +990,13 @@ const fmtClock = (sec) => {
 };
 const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-// A chime every 10 minutes while the timer runs (can be muted on each device).
-const CHIME_EVERY = 10 * 60;
+// A chime every few minutes while the timer runs (Settings > Build timer; 0 = off).
+const chimeEvery = () => {
+  const m = Number(db.settings.chimeMinutes ?? 10);
+  return Number.isFinite(m) && m > 0 ? m * 60 : 0;
+};
 let audioCtx = null;
 let chimedAt = null; // the timer start and the 10-minute mark last chimed (or skipped)
-const chimeOn = () => loadUi().chime !== false;
 
 function unlockAudio() {
   // Browsers only allow sound after the person has clicked something on the page.
@@ -1019,21 +1025,15 @@ function playChime() {
 }
 
 function maybeChime() {
-  if (!timerOn()) { chimedAt = null; return; }
-  const mark = Math.floor((nowSec() - db.timer.start) / CHIME_EVERY);
-  // First look at this run (e.g. the page was just opened): note where it's up to without chiming.
-  if (!chimedAt || chimedAt.start !== db.timer.start) { chimedAt = { start: db.timer.start, mark }; return; }
+  const every = chimeEvery();
+  if (!timerOn() || !every) { chimedAt = null; return; }
+  const mark = Math.floor((nowSec() - db.timer.start) / every);
+  // First look at this run (e.g. the page was just opened, or the interval changed): note where it's up to without chiming.
+  if (!chimedAt || chimedAt.start !== db.timer.start || chimedAt.every !== every) { chimedAt = { start: db.timer.start, every, mark }; return; }
   if (mark > chimedAt.mark) {
     chimedAt.mark = mark;
-    if (chimeOn()) playChime();
+    playChime();
   }
-}
-
-function showChimeButton() {
-  const on = chimeOn(), b = $('#btnChime');
-  b.textContent = on ? '\u{1F514}' : '\u{1F515}';
-  b.classList.toggle('off', !on);
-  b.title = on ? 'Chimes every 10 minutes - click to mute on this device' : 'Muted - click to chime every 10 minutes';
 }
 
 // The numbers that change every second while the timer runs.
@@ -1143,12 +1143,6 @@ function setupTimer() {
     const chip = e.target.closest('[data-id]');
     if (chip && chip.dataset.id !== cur.id) loadPainting(chip.dataset.id);
   });
-  showChimeButton();
-  $('#btnChime').onclick = () => {
-    saveUi({ chime: !chimeOn() });
-    showChimeButton();
-    if (chimeOn()) playChime(); // let them hear it
-  };
   document.addEventListener('pointerdown', unlockAudio, { capture: true });
   document.addEventListener('keydown', unlockAudio, { capture: true });
   $('#btnTimeAdd').onclick = addTime;

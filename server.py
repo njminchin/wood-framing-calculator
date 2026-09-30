@@ -79,6 +79,7 @@ DEFAULT_SETTINGS = {
     "kerf": 3,
     "skuFormat": "{PREFIX}-{YYYY}-{SEQ:4}",
     "skuPrefix": "FF",
+    "chimeMinutes": 10,
 }
 
 _lock = threading.Lock()
