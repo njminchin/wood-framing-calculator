@@ -1052,12 +1052,16 @@ function updateDock() {
   const show = !viewOnly && (on || frames.length > 0);
   $('#timerDock').hidden = !show;
   document.body.classList.toggle('has-dock', show);
-  if (!show) return;
+  if (!show) { syncTimerNotification(); return; }
   $('#timerDock').classList.toggle('running', on);
   const n = frames.length;
   $('#dockLabel').textContent = on ? (n > 1 ? `Split between ${n}:` : 'Timing:') : `${n} being built:`;
   $('#dockFrames').innerHTML = frames.map((p) => `<button type="button" class="dock-chip${cur && p.id === cur.id ? ' current' : ''}" data-id="${p.id}" title="${esc(paintingLabel(p))}">${esc(p.sku || p.title || 'Untitled')}</button>`).join('');
+  syncTimerNotification();
   const btn = $('#btnDockTimer');
+  const rec = savedRec();
+  // Start only from a frame that's being built; Stop whenever the timer runs.
+  btn.hidden = !on && !(rec && statusOf(rec) === 'building');
   btn.textContent = on ? 'Stop' : 'Start timer';
   btn.title = on ? 'Stop the timer and share its time between the frames being built' : `Time your work; it's shared between the ${n} frame${n === 1 ? '' : 's'} marked Building`;
 }
@@ -1071,6 +1075,7 @@ function updateTimer() {
   box.hidden = !rec || viewOnly || (st === 'none' && !timeSpent(rec) && !(rec.timeLog || []).length);
   if (box.hidden) return;
   const btn = $('#btnTimer');
+  btn.hidden = st !== 'building'; // only frames being built can be timed (Stop is always in the dock)
   btn.textContent = on ? 'Stop timer' : 'Start timer';
   btn.classList.toggle('running', on);
   btn.disabled = !on && !n;
@@ -1154,17 +1159,87 @@ function setupTimer() {
   setInterval(() => { if (timerOn()) tickTimer(); }, 1000);
   // Pick up changes made on another device (e.g. the timer started on a phone): when the
   // page comes back into view (phones don't always send "focus"), and every minute while it's open.
-  let refreshing = false;
-  const refresh = async () => {
-    if (!cur || refreshing || document.hidden) return;
-    refreshing = true;
-    try { setDb(await api.state()); refreshLists(); updateStatus(); } catch { /* offline - keep what we have */ }
-    refreshing = false;
-  };
-  window.addEventListener('focus', refresh);
-  document.addEventListener('visibilitychange', refresh);
-  window.addEventListener('pageshow', (e) => { if (e.persisted) refresh(); }); // back from the browser's page cache
-  setInterval(refresh, 60 * 1000);
+  window.addEventListener('focus', () => refreshState());
+  document.addEventListener('visibilitychange', () => refreshState());
+  window.addEventListener('pageshow', (e) => { if (e.persisted) refreshState(); }); // back from the browser's page cache
+  setInterval(() => refreshState(), 60 * 1000);
+  setupTimerNotification();
+}
+
+let refreshing = false;
+async function refreshState(force = false) {
+  // In the background, only keep checking while the timer runs (for its notification).
+  if (!cur || viewOnly || refreshing || (document.hidden && !force && !timerOn())) return;
+  refreshing = true;
+  try { setDb(await api.state()); refreshLists(); updateStatus(); } catch { /* offline - keep what we have */ }
+  refreshing = false;
+}
+
+// ---- Notification while the timer runs (per device), with a Stop button handled by sw.js.
+const NOTIFY_TAG = 'build-timer';
+const notifySupported = () => 'Notification' in window && 'serviceWorker' in navigator;
+const notifyOn = () => notifySupported() && loadUi().timerNotify === true && Notification.permission === 'granted';
+let notifyShown = ''; // what the current notification says, so it isn't re-posted for nothing
+
+async function syncTimerNotification() {
+  if (!notifySupported() || viewOnly) return;
+  const reg = await navigator.serviceWorker.getRegistration().catch(() => null);
+  if (!reg) return;
+  const existing = await reg.getNotifications({ tag: NOTIFY_TAG }).catch(() => []);
+  if (!timerOn() || !notifyOn()) {
+    existing.forEach((n) => n.close());
+    notifyShown = '';
+    return;
+  }
+  const frames = db.paintings.filter((p) => statusOf(p) === 'building');
+  const names = frames.map((p) => p.sku || p.title || 'Untitled').join(', ');
+  const body = `Started ${fmtTime(db.timer.start)}${frames.length ? ` \u00B7 ${frames.length > 1 ? `split between ${frames.length}: ` : ''}${names}` : ''}`;
+  if (existing.length && notifyShown === body) return; // still showing, nothing new to say
+  notifyShown = body;
+  await reg.showNotification('\u23F1 Build timer running', {
+    tag: NOTIFY_TAG,
+    body,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/badge-96.png',
+    timestamp: Math.round(db.timer.start * 1000), // Android shows how long ago it started
+    requireInteraction: true,
+    silent: true,
+    renotify: false,
+    actions: [{ action: 'stop', title: 'Stop timer' }],
+    data: { url: location.href.split('#')[0] },
+  }).catch(() => { notifyShown = ''; });
+}
+
+function showNotifySetting() {
+  const box = $('#timerNotify'), help = $('#timerNotifyHelp');
+  if (!notifySupported()) {
+    box.checked = false;
+    box.disabled = true;
+    help.textContent = 'This browser can\u2019t show notifications. Install the app from Chrome on your phone to use them.';
+    return;
+  }
+  box.checked = notifyOn();
+  help.textContent = Notification.permission === 'denied'
+    ? 'Notifications are blocked for this site. Allow them in the browser\u2019s site settings, then tick this again.'
+    : 'On this device only. Best in the installed app on your phone.';
+}
+
+function setupTimerNotification() {
+  showNotifySetting();
+  $('#timerNotify').addEventListener('change', async (e) => {
+    let on = e.target.checked;
+    if (on && Notification.permission !== 'granted') on = (await Notification.requestPermission().catch(() => 'denied')) === 'granted';
+    saveUi({ timerNotify: on });
+    showNotifySetting();
+    syncTimerNotification();
+    if (on) toast(timerOn() ? 'The timer notification is showing' : 'A notification will show while the timer runs');
+  });
+  // The Stop button in the notification stops the timer from the service worker; catch up here.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'refresh') refreshState(true);
+    });
+  }
 }
 
 // ---------------------------------------------------------------- Share links

@@ -7,6 +7,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.0',
+    date: '2026-09-30',
+    changes: [
+      'New option in Settings → Build timer: show a notification while the timer runs, with a Stop timer button. It works even with the app closed, and if you swipe it away it comes back while the timer is still running. Turn it on separately on each device; it works best in the installed app on your phone.',
+      'Start timer now only shows on frames marked Building. Stop is always in the timer bar while the timer runs.',
+    ],
+  },
+  {
     version: '1.10.0',
     date: '2026-09-30',
     changes: [

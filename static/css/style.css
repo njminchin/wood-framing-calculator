@@ -395,6 +395,8 @@ body.has-dock .toast { bottom: 76px; }
 .time-add #timeAddMin { width: 90px; flex: none; }
 .time-add button { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
 
+.notify-check { color: var(--text); margin: 6px 0 4px; }
+
 /* Settings (cutting setup and SKU numbering) */
 .icon-button { line-height: 0; padding: 6px 8px; position: relative; color: var(--muted); }
 .icon-button:hover { color: var(--text); }
