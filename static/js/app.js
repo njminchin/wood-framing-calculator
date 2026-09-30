@@ -605,6 +605,8 @@ function markChanges() {
       Object.assign(btn.style, { left: `${el.offsetLeft + el.offsetWidth - inset}px`, top: `${el.offsetTop + el.offsetHeight / 2}px` });
     }
   }
+  // Settings are in a dialog: flag its button if something inside changed.
+  $('#btnSettings').classList.toggle('changed', !!$('#settingsDialog .changed'));
   // Collapsed "Diagonals" section: flag it if something inside changed.
   for (const d of $$('details.more')) d.querySelector('summary').classList.toggle('changed', !!d.querySelector('.changed'));
 
@@ -1138,6 +1140,10 @@ function bindEvents() {
   $('#btnSave').onclick = () => save();
   $('#btnSaveAsNew').onclick = saveAsNew;
   $('#btnReload').onclick = reloadSaved;
+  const settings = $('#settingsDialog');
+  $('#btnSettings').onclick = () => { settings.showModal(); markChanges(); }; // place revert buttons now it's visible
+  $('#settingsClose').onclick = () => settings.close();
+  settings.addEventListener('click', (e) => { if (e.target === settings) settings.close(); });
   for (const b of $$('#statusSeg button')) b.onclick = () => setFrameStatus(b.dataset.status);
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAsNew(); else save(); }
@@ -1375,8 +1381,8 @@ function runTour() {
       text: '<p>Enter the top and bottom widths and the left and right heights in mm. Stretched canvases are rarely perfectly square, so measure all four; tick <b>same as</b> when they match.</p><p>Adding the two diagonals gives the most accurate corner angles.</p>' },
     { target: '#cardFrame', title: 'Frame settings',
       text: '<p>Your wood sizes, the gap around the painting and the lip. They’re saved with each painting, and <b>Save as defaults</b> makes them the starting point for new ones.</p>' },
-    { target: '#cardCutting', title: 'Your mitre sled',
-      text: '<p>Tell the app how you cut: how far the far tape point is from the blade, how thick one layer of tape is, and which face of the L goes against the 45° fence.</p>' },
+    { target: '#btnSettings', title: 'Settings',
+      text: '<p>Tell the app how you cut: how far the far tape point is from the blade, how thick one layer of tape is, and which face of the L goes against the 45° fence. This is also where you set how SKUs are numbered.</p>' },
     { target: '#panel-cut', before: () => setTab('cut'), title: 'The cut list',
       text: '<p>Once the painting is measured, this shows the length of all 8 strips (cut to the <b>long point</b>), the mitre angle at each end, and how many layers of masking tape to put where for each corner.</p><p>Click a corner to see its setup on the sled diagram.</p>' },
     { target: '[data-tab="model"]', title: '3D model',

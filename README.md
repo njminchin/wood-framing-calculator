@@ -126,7 +126,7 @@ The address, path and DuckDNS token are remembered, so later updates only need `
 
 - **Inputs** (mm): top and bottom widths, left and right heights ("same as" ticked by default), canvas depth, and optionally the two diagonals. Also the SKU, title and artist. Artist names are remembered for the dropdown.
 - **Frame settings**, saved with each painting: good wood thickness, cheap wood thickness and width, whether the cheap strip sits against the inside face of the good wood or underneath it, the gap to the painting, and the lip (negative recesses the frame). Use *Save as defaults* to make them the starting values for new paintings.
-- **Cutting setup**: the distance of the far tape point from the blade, the thickness of one layer of masking tape, which face of the L rides the 45° fence, and the saw kerf.
+- **Cutting setup** (under Settings, the ⚙ button): the distance of the far tape point from the blade, the thickness of one layer of masking tape, which face of the L rides the 45° fence, and the saw kerf.
 - **Cut list**: long-point and short-point lengths for all 8 strips, the corner angles and the mitre angle at each end, and the tape shim for each corner (near the blade or at the far end, and how many layers). It also shows the result you'll actually cut and the expected joint gap.
 - **3D model**: rotate and zoom it, show or hide the painting and the measurements, paint the top of the cheap wood black, see an exploded view, and upload the painting's image (a default image is used otherwise). *Save PNG* saves a picture of the view.
 - **Status**: mark each frame as not started, building or made. Building and made frames get a badge with the date, the load list shows each frame's status with an icon, and the Library can filter by status.

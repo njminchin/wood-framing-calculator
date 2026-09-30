@@ -348,6 +348,13 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .card.building { box-shadow: var(--shadow), inset 3px 0 0 var(--warn-ink); }
 .card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
 
+/* Settings (cutting setup and SKU numbering) */
+.icon-button { font-size: 21px; line-height: 1; padding: 3px 8px; position: relative; }
+.icon-button.changed { border-color: var(--accent); color: var(--accent); }
+.icon-button.changed::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.settings-dialog .card { box-shadow: none; margin-bottom: 12px; }
+.settings-dialog .card:last-child { margin-bottom: 0; }
+
 /* Share links */
 #shareUrl { margin: 4px 0 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }

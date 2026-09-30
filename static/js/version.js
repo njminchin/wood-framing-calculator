@@ -7,6 +7,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.1',
+    date: '2026-09-30',
+    changes: [
+      'Cutting setup and SKU numbering have moved into Settings (the ⚙ button at the top right), leaving more room for the painting. The ⚙ button shows a dot when something in there hasn’t been saved.',
+      'The buttons at the top are now in the order Share, New, Save, Save as new.',
+    ],
+  },
+  {
     version: '1.6.0',
     date: '2026-09-30',
     changes: [

@@ -35,10 +35,11 @@
       <span id="statusBadge" class="status-pill" hidden></span>
       <span id="saveStatus" class="save-status"></span>
       <button id="btnReload" type="button" class="link" hidden title="Discard your changes and reload the saved version">&#8635; Reload</button>
-      <button id="btnNew" type="button">New</button>
-      <button id="btnSaveAsNew" type="button" title="Save a copy as a new painting, leaving the original unchanged (Ctrl+Shift+S)">Save as new</button>
       <button id="btnShare" type="button" title="Get a read-only link to this frame">Share</button>
+      <button id="btnNew" type="button">New</button>
       <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
+      <button id="btnSaveAsNew" type="button" title="Save a copy as a new painting, leaving the original unchanged (Ctrl+Shift+S)">Save as new</button>
+      <button id="btnSettings" type="button" class="icon-button" title="Settings: cutting setup and SKU numbering" aria-label="Settings">&#9881;</button>
       <div id="userMenu" class="user-menu" hidden>
         <span id="userName" class="user-name"></span>
         <button id="btnInvite" type="button" class="link" hidden>Invite code</button>
@@ -194,59 +195,66 @@
         </div>
       </section>
 
-      <section class="card" id="cardCutting">
-        <h2>Cutting setup</h2>
-        <div class="row2">
-          <div class="field">
-            <label for="s-td">Far tape point from blade <span class="unit">mm</span></label>
-            <input id="s-td" data-s="tapeDistance" type="number" step="1" min="1">
+      <!-- Inside the form so its inputs are handled like the others. -->
+      <dialog id="settingsDialog" class="dialog dialog-medium settings-dialog">
+        <div class="dialog-head">
+          <h2>Settings</h2>
+          <button type="button" class="link" id="settingsClose">Close</button>
+        </div>
+        <section class="card" id="cardCutting">
+          <h2>Cutting setup</h2>
+          <div class="row2">
+            <div class="field">
+              <label for="s-td">Far tape point from blade <span class="unit">mm</span></label>
+              <input id="s-td" data-s="tapeDistance" type="number" step="1" min="1">
+            </div>
+            <div class="field">
+              <label for="s-tt">Tape thickness / layer <span class="unit">mm</span></label>
+              <input id="s-tt" data-s="tapeThickness" type="number" step="0.01" min="0.01">
+            </div>
           </div>
           <div class="field">
-            <label for="s-tt">Tape thickness / layer <span class="unit">mm</span></label>
-            <input id="s-tt" data-s="tapeThickness" type="number" step="0.01" min="0.01">
+            <label for="s-fence">Against the 45° fence</label>
+            <select id="s-fence" data-s="fenceEdge">
+              <option value="outer">Good wood - outer face</option>
+              <option value="goodInner">Good wood - inner face (L upside down)</option>
+              <option value="inner">Cheap wood - inner edge</option>
+            </select>
           </div>
-        </div>
-        <div class="field">
-          <label for="s-fence">Against the 45° fence</label>
-          <select id="s-fence" data-s="fenceEdge">
-            <option value="outer">Good wood - outer face</option>
-            <option value="goodInner">Good wood - inner face (L upside down)</option>
-            <option value="inner">Cheap wood - inner edge</option>
-          </select>
-        </div>
-        <div class="row2">
-          <div class="field">
-            <label for="s-kerf">Saw kerf <span class="unit">mm</span></label>
-            <input id="s-kerf" data-s="kerf" type="number" step="0.1" min="0">
+          <div class="row2">
+            <div class="field">
+              <label for="s-kerf">Saw kerf <span class="unit">mm</span></label>
+              <input id="s-kerf" data-s="kerf" type="number" step="0.1" min="0">
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="card" id="cardSku">
-        <h2>SKU numbering</h2>
-        <div class="row-wide">
-          <div class="field">
-            <label for="sku-format">Format</label>
-            <input id="sku-format" autocomplete="off" spellcheck="false">
+        <section class="card" id="cardSku">
+          <h2>SKU numbering</h2>
+          <div class="row-wide">
+            <div class="field">
+              <label for="sku-format">Format</label>
+              <input id="sku-format" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="field">
+              <label for="sku-prefix">Prefix</label>
+              <input id="sku-prefix" autocomplete="off" spellcheck="false">
+            </div>
           </div>
-          <div class="field">
-            <label for="sku-prefix">Prefix</label>
-            <input id="sku-prefix" autocomplete="off" spellcheck="false">
-          </div>
-        </div>
-        <p class="help">Next SKU: <b id="skuPreview"></b> <span id="skuWarning" class="sku-warning"></span></p>
-        <details class="more">
-          <summary>Format codes</summary>
-          <p class="help">
-            <code>{PREFIX}</code> the prefix · <code>{YYYY}</code> year (2026) · <code>{YY}</code> short year (26) ·
-            <code>{MM}</code> month · <code>{SEQ:4}</code> running number with 4 digits ·
-            <code>{ARTIST}</code> artist initials · <code>{SIZE}</code> width x height (e.g. 600x400).
-            Anything else is used as typed.
-          </p>
-          <p class="help">The running number counts up from the highest SKU already saved with the same other parts, so with <code>{YYYY}</code> it starts again at 1 each year.</p>
-        </details>
-        <p class="help">Saved automatically as your default.</p>
-      </section>
+          <p class="help">Next SKU: <b id="skuPreview"></b> <span id="skuWarning" class="sku-warning"></span></p>
+          <details class="more">
+            <summary>Format codes</summary>
+            <p class="help">
+              <code>{PREFIX}</code> the prefix · <code>{YYYY}</code> year (2026) · <code>{YY}</code> short year (26) ·
+              <code>{MM}</code> month · <code>{SEQ:4}</code> running number with 4 digits ·
+              <code>{ARTIST}</code> artist initials · <code>{SIZE}</code> width x height (e.g. 600x400).
+              Anything else is used as typed.
+            </p>
+            <p class="help">The running number counts up from the highest SKU already saved with the same other parts, so with <code>{YYYY}</code> it starts again at 1 each year.</p>
+          </details>
+          <p class="help">Saved automatically as your default.</p>
+        </section>
+      </dialog>
     </aside>
 
     <main class="main">
