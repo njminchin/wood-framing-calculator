@@ -986,10 +986,61 @@ const fmtClock = (sec) => {
 };
 const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+// A chime every 10 minutes while the timer runs (can be muted on each device).
+const CHIME_EVERY = 10 * 60;
+let audioCtx = null;
+let chimedAt = null; // the timer start and the 10-minute mark last chimed (or skipped)
+const chimeOn = () => loadUi().chime !== false;
+
+function unlockAudio() {
+  // Browsers only allow sound after the person has clicked something on the page.
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { /* no Web Audio */ }
+}
+
+function playChime() {
+  unlockAudio();
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime + 0.05;
+  // Two soft bell tones, high then low.
+  [[880, 0], [659.25, 0.28]].forEach(([freq, delay]) => {
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t0 + delay);
+    gain.gain.exponentialRampToValueAtTime(0.35, t0 + delay + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 1.4);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0 + delay);
+    osc.stop(t0 + delay + 1.5);
+  });
+}
+
+function maybeChime() {
+  if (!timerOn()) { chimedAt = null; return; }
+  const mark = Math.floor((nowSec() - db.timer.start) / CHIME_EVERY);
+  // First look at this run (e.g. the page was just opened): note where it's up to without chiming.
+  if (!chimedAt || chimedAt.start !== db.timer.start) { chimedAt = { start: db.timer.start, mark }; return; }
+  if (mark > chimedAt.mark) {
+    chimedAt.mark = mark;
+    if (chimeOn()) playChime();
+  }
+}
+
+function showChimeButton() {
+  const on = chimeOn(), b = $('#btnChime');
+  b.textContent = on ? '\u{1F514}' : '\u{1F515}';
+  b.classList.toggle('off', !on);
+  b.title = on ? 'Chimes every 10 minutes - click to mute on this device' : 'Muted - click to chime every 10 minutes';
+}
+
 // The numbers that change every second while the timer runs.
 function tickTimer() {
   const on = timerOn(), n = buildingCount();
   $('#timerPill').hidden = !on || viewOnly;
+  maybeChime();
   if (on) $('#timerClock').textContent = `\u23F1 ${fmtClock(nowSec() - db.timer.start)} \u00B7 ${n} frame${n === 1 ? '' : 's'}`;
   const rec = savedRec();
   if (rec) $('#timeTotal').textContent = fmtDuration(timeSpent(rec));
@@ -1071,6 +1122,14 @@ async function removeTime(ids) {
 function setupTimer() {
   $('#btnTimer').onclick = toggleTimer;
   $('#btnTimerStop').onclick = toggleTimer;
+  showChimeButton();
+  $('#btnChime').onclick = () => {
+    saveUi({ chime: !chimeOn() });
+    showChimeButton();
+    if (chimeOn()) playChime(); // let them hear it
+  };
+  document.addEventListener('pointerdown', unlockAudio, { capture: true });
+  document.addEventListener('keydown', unlockAudio, { capture: true });
   $('#btnTimeAdd').onclick = addTime;
   $('#timeAddMin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTime(); } });
   $('#timeLog').addEventListener('click', (e) => {

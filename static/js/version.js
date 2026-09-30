@@ -7,6 +7,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.1',
+    date: '2026-09-30',
+    changes: [
+      'A soft chime plays every 10 minutes while the build timer is running. Click the 🔔 in the timer at the top to mute it (🔕) on that device, or click it again to turn it back on.',
+    ],
+  },
+  {
     version: '1.7.0',
     date: '2026-09-30',
     changes: [
