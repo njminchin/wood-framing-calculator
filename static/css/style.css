@@ -353,13 +353,14 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
 
 /* Build timer */
+/* A bar along the bottom of the page, like the top bar. */
 .timer-dock {
-  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 40;
-  display: flex; align-items: center; gap: 8px; width: min(620px, calc(100vw - 24px));
-  padding: 8px 10px 8px 16px; background: var(--panel); color: var(--text);
-  border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 18px; background: var(--panel); color: var(--text);
+  border-top: 1px solid var(--line);
 }
-.timer-dock.running { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn-ink) 40%, transparent); }
+.timer-dock.running { background: var(--warn-bg); border-top-color: color-mix(in srgb, var(--warn-ink) 30%, transparent); }
 .dock-info { flex: 1; min-width: 0; display: grid; gap: 3px; }
 .dock-clock { font-size: 19px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--muted); }
 .timer-dock.running .dock-clock { color: var(--warn-ink); }
@@ -372,11 +373,11 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .chime-btn { flex: none; font-size: 19px; line-height: 1; padding: 6px; background: none; border: none; }
 .chime-btn.off { opacity: .5; }
 #btnDockTimer { flex: none; }
-body.has-dock { padding-bottom: 88px; }
-body.has-dock .toast { bottom: 92px; }
+/* Room under the page content so the bar never covers it (body is fixed at 100% height). */
+body.has-dock .layout { padding-bottom: 88px; }
+body.has-dock .toast { bottom: 76px; }
 @media (max-width: 640px) {
-  .timer-dock { bottom: 0; width: 100%; border-radius: 14px 14px 0 0; border-bottom: none; padding: 8px 10px 10px 14px; }
-  body.has-dock .toast { bottom: 84px; }
+  .timer-dock { padding: 8px 12px; }
 }
 .time-box { border-top: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent); padding-top: 7px; display: grid; gap: 4px; color: var(--text); }
 .time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }

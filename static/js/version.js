@@ -7,6 +7,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.2',
+    date: '2026-09-30',
+    changes: [
+      'The timer dock is now a plain bar across the bottom of the page, matching the top bar, instead of a floating panel with rounded corners.',
+      'Fixed the dock covering the last bit of the page when you scrolled right to the bottom.',
+    ],
+  },
+  {
     version: '1.8.1',
     date: '2026-09-30',
     changes: [
