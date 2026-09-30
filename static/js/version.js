@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.0',
+    date: '2026-09-30',
+    changes: [
+      'The build timer has moved from the top bar into a dock at the bottom of the screen. It’s easier to see, and on a phone it sits along the bottom edge.',
+      'The dock shows whenever frames are marked Building, so you can start the timer from any painting, not just one that’s being built.',
+      'The dock lists the frames sharing the time. Tap one to open it. The 🔔 mute button is in the dock too.',
+    ],
+  },
+  {
     version: '1.7.1',
     date: '2026-09-30',
     changes: [

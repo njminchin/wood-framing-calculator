@@ -350,10 +350,31 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
 
 /* Build timer */
-.timer-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--warn-ink); background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn-ink) 35%, transparent); border-radius: 99px; padding: 0 4px 0 9px; white-space: nowrap; }
-.timer-pill button { padding: 1px 4px; font-size: 12px; }
-.timer-pill .chime-btn { font-size: 13px; line-height: 1; padding: 1px 2px; }
-.timer-pill .chime-btn.off { opacity: .55; }
+.timer-dock {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; gap: 8px; width: min(620px, calc(100vw - 24px));
+  padding: 8px 10px 8px 16px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2);
+}
+.timer-dock.running { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn-ink) 40%, transparent); }
+.dock-info { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.dock-clock { font-size: 19px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--muted); }
+.timer-dock.running .dock-clock { color: var(--warn-ink); }
+.dock-frames { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+.dock-label { white-space: nowrap; flex: none; }
+.dock-chips { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.dock-chips::-webkit-scrollbar { display: none; }
+.dock-chip { flex: none; padding: 1px 9px; font-size: 12px; border-radius: 99px; white-space: nowrap; background: var(--panel); }
+.dock-chip.current { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chime-btn { flex: none; font-size: 19px; line-height: 1; padding: 6px; background: none; border: none; }
+.chime-btn.off { opacity: .5; }
+#btnDockTimer { flex: none; }
+body.has-dock { padding-bottom: 88px; }
+body.has-dock .toast { bottom: 92px; }
+@media (max-width: 640px) {
+  .timer-dock { bottom: 0; width: 100%; border-radius: 14px 14px 0 0; border-bottom: none; padding: 8px 10px 10px 14px; }
+  body.has-dock .toast { bottom: 84px; }
+}
 .time-box { border-top: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent); padding-top: 7px; display: grid; gap: 4px; color: var(--text); }
 .time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .time-row b { font-variant-numeric: tabular-nums; }
@@ -384,7 +405,7 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
 .share-banner .sub { color: var(--muted); }
 body.view-only .quickload, body.view-only #btnNew, body.view-only #btnSave, body.view-only #btnSaveAsNew,
-body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #statusSeg, body.view-only #timeBox, body.view-only #timerPill,
+body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #statusSeg, body.view-only #timeBox, body.view-only #timerDock,
 body.view-only #btnSaveDefaults, body.view-only #btnResetDefaults, body.view-only #btnGenerateSku,
 body.view-only #btnTour, body.view-only .brand-sub .version-text, body.view-only .image-actions,
 body.view-only #matchHint { display: none !important; }

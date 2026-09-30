@@ -35,7 +35,6 @@
       <div class="status-group">
         <span id="statusBadge" class="status-pill" hidden></span>
         <span id="saveStatus" class="save-status"></span>
-        <span id="timerPill" class="timer-pill" hidden title="The build timer is running"><span id="timerClock"></span><button type="button" id="btnChime" class="link chime-btn"></button><button type="button" id="btnTimerStop" class="link">Stop</button></span>
         <button id="btnReload" type="button" class="link" hidden title="Discard your changes and reload the saved version">&#8635; Reload</button>
       </div>
       <button id="btnShare" type="button" title="Get a read-only link to this frame">Share</button>
@@ -434,6 +433,16 @@
       <button type="submit" class="primary" id="authSubmit">Sign in</button>
       <p class="help" id="authNote"></p>
     </form>
+  </div>
+
+  <!-- Build timer dock: shown while the timer runs or any frame is marked Building. -->
+  <div id="timerDock" class="timer-dock" hidden>
+    <div class="dock-info">
+      <div id="dockClock" class="dock-clock"></div>
+      <div class="dock-frames"><span id="dockLabel" class="dock-label"></span><span id="dockFrames" class="dock-chips"></span></div>
+    </div>
+    <button type="button" id="btnChime" class="chime-btn"></button>
+    <button type="button" id="btnDockTimer" class="primary">Start timer</button>
   </div>
 
   <div id="toast" class="toast" hidden></div>

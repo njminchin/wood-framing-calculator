@@ -1038,15 +1038,32 @@ function showChimeButton() {
 
 // The numbers that change every second while the timer runs.
 function tickTimer() {
-  const on = timerOn(), n = buildingCount();
-  $('#timerPill').hidden = !on || viewOnly;
+  const on = timerOn();
   maybeChime();
-  if (on) $('#timerClock').textContent = `\u23F1 ${fmtClock(nowSec() - db.timer.start)} \u00B7 ${n} frame${n === 1 ? '' : 's'}`;
+  $('#dockClock').textContent = on ? `\u23F1 ${fmtClock(nowSec() - db.timer.start)}` : '\u23F1 Timer stopped';
   const rec = savedRec();
   if (rec) $('#timeTotal').textContent = fmtDuration(timeSpent(rec));
 }
 
+// The dock at the bottom of the screen: shown while the timer runs or anything is being built.
+function updateDock() {
+  const on = timerOn();
+  const frames = db.paintings.filter((p) => statusOf(p) === 'building');
+  const show = !viewOnly && (on || frames.length > 0);
+  $('#timerDock').hidden = !show;
+  document.body.classList.toggle('has-dock', show);
+  if (!show) return;
+  $('#timerDock').classList.toggle('running', on);
+  const n = frames.length;
+  $('#dockLabel').textContent = on ? (n > 1 ? `Split between ${n}:` : 'Timing:') : `${n} being built:`;
+  $('#dockFrames').innerHTML = frames.map((p) => `<button type="button" class="dock-chip${cur && p.id === cur.id ? ' current' : ''}" data-id="${p.id}" title="${esc(paintingLabel(p))}">${esc(p.sku || p.title || 'Untitled')}</button>`).join('');
+  const btn = $('#btnDockTimer');
+  btn.textContent = on ? 'Stop' : 'Start timer';
+  btn.title = on ? 'Stop the timer and share its time between the frames being built' : `Time your work; it's shared between the ${n} frame${n === 1 ? '' : 's'} marked Building`;
+}
+
 function updateTimer() {
+  updateDock();
   tickTimer();
   const rec = savedRec(), box = $('#timeBox');
   const on = timerOn(), n = buildingCount();
@@ -1121,7 +1138,11 @@ async function removeTime(ids) {
 
 function setupTimer() {
   $('#btnTimer').onclick = toggleTimer;
-  $('#btnTimerStop').onclick = toggleTimer;
+  $('#btnDockTimer').onclick = toggleTimer;
+  $('#dockFrames').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-id]');
+    if (chip && chip.dataset.id !== cur.id) loadPainting(chip.dataset.id);
+  });
   showChimeButton();
   $('#btnChime').onclick = () => {
     saveUi({ chime: !chimeOn() });
