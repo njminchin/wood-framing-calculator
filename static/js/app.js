@@ -49,13 +49,23 @@ const api = {
   deleteImage: (id) => api.req('DELETE', `api/paintings/${id}/image`),
   setShare: (id, share) => api.req('POST', `api/paintings/${id}/share`, { share }),
   shared: (token) => api.req('GET', `api/share/${encodeURIComponent(token)}`),
+  timer: (action) => api.req('POST', 'api/timer', { action }),
+  addTime: (id, minutes, note) => api.req('POST', `api/paintings/${id}/time`, { minutes, note }),
+  deleteTime: (id, entry) => api.req('DELETE', `api/paintings/${id}/time/${entry}`),
   setStatus: (id, status) => api.req('POST', `api/paintings/${id}/status`, { status }),
   addArtist: (name) => api.req('POST', 'api/artists', { name }),
   deleteArtist: (name) => api.req('DELETE', `api/artists/${encodeURIComponent(name)}`),
 };
 
 // ---------------------------------------------------------------- State
-let db = { settings: {}, paintings: [], artists: [] };
+let db = { settings: {}, paintings: [], artists: [], timer: {} };
+let clockSkew = 0; // server clock minus this computer's, in seconds (for the build timer)
+
+// Take a library state from the server.
+function setDb(res) {
+  db = { settings: res.settings, paintings: res.paintings, artists: res.artists, timer: res.timer || {} };
+  if (res.now) clockSkew = res.now - Date.now() / 1000;
+}
 let cur = null; // the painting being edited
 let savedSnapshot = null; // JSON of `cur` as last saved/loaded, for dirty tracking
 let frame = null;
@@ -638,7 +648,7 @@ async function reloadSaved() {
   if (!cur.id) return;
   if (!confirm('Discard all your unsaved changes to this painting and reload the saved version?')) return;
   try {
-    db = await api.state();
+    setDb(await api.state());
     refreshLists();
   } catch (e) {
     toast('Could not reach the server: ' + e.message, true);
@@ -653,6 +663,7 @@ async function reloadSaved() {
 function updateStatus() {
   updateDefaultsButtons();
   updateFrameStatus();
+  updateTimer();
   $('#btnSaveAsNew').disabled = !cur.id; // only useful once a saved painting is loaded
   const el = $('#saveStatus');
   const changes = markChanges();
@@ -778,7 +789,7 @@ async function save(message = 'Saved') {
       res = await api.deleteImage(cur.id);
       res.painting = res.paintings.find((p) => p.id === cur.id);
     }
-    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    setDb(res);
     const saved = fromRecord(res.painting);
     saved.settings = { ...cur.settings };
     setCurrent(saved);
@@ -888,7 +899,7 @@ async function deletePainting(id) {
   if (!rec || !confirm(`Delete "${paintingLabel(rec)}" from the library? This can't be undone.`)) return;
   try {
     const res = await api.deletePainting(id);
-    db = res;
+    setDb(res);
     if (cur.id === id) { cur.id = null; cur.image = null; savedSnapshot = 'deleted'; updateStatus(); updateImageUi(); }
     refreshLists();
     toast('Deleted');
@@ -939,13 +950,139 @@ async function setFrameStatus(st) {
   if (st === 'none' && !confirm('Mark this frame as not started?')) return;
   try {
     const res = await api.setStatus(cur.id, st === 'none' ? null : st);
-    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    setDb(res);
     for (const k of ['status', 'buildingAt', 'madeAt']) cur[k] = res.painting[k] ?? null;
     refreshLists();
     updateStatus();
     saveDraft();
-    toast(st === 'made' ? 'Marked as made' : st === 'building' ? 'Marked as building' : 'Marked as not started');
+    toast((st === 'made' ? 'Marked as made' : st === 'building' ? 'Marked as building' : 'Marked as not started')
+      + (res.timerStopped ? '. The timer has stopped - no frames are being built now.' : ''));
   } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- Build timer
+// One timer for the workshop. While it runs, its time is split equally between all
+// the frames marked Building; the server adds each frame's share to its time log.
+const nowSec = () => Date.now() / 1000 + clockSkew;
+const timerOn = () => !!(db.timer && db.timer.start);
+const buildingCount = () => db.paintings.filter((p) => statusOf(p) === 'building').length;
+const savedRec = () => (cur && cur.id ? db.paintings.find((p) => p.id === cur.id) : null);
+
+// Total time for a frame, including its share of the timer's time since the last split.
+function timeSpent(p) {
+  let t = (p.timeLog || []).reduce((sum, e) => sum + (e.seconds || 0), 0);
+  if (timerOn() && statusOf(p) === 'building') t += Math.max(0, nowSec() - db.timer.segmentStart) / Math.max(1, buildingCount());
+  return Math.max(0, t);
+}
+
+function fmtDuration(sec) {
+  const m = Math.round(Math.abs(sec) / 60), sign = sec < 0 ? '-' : '';
+  if (m < 60) return `${sign}${m} min`;
+  return `${sign}${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+const fmtClock = (sec) => {
+  const s = Math.max(0, Math.floor(sec));
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+// The numbers that change every second while the timer runs.
+function tickTimer() {
+  const on = timerOn(), n = buildingCount();
+  $('#timerPill').hidden = !on || viewOnly;
+  if (on) $('#timerClock').textContent = `\u23F1 ${fmtClock(nowSec() - db.timer.start)} \u00B7 ${n} frame${n === 1 ? '' : 's'}`;
+  const rec = savedRec();
+  if (rec) $('#timeTotal').textContent = fmtDuration(timeSpent(rec));
+}
+
+function updateTimer() {
+  tickTimer();
+  const rec = savedRec(), box = $('#timeBox');
+  const on = timerOn(), n = buildingCount();
+  const st = rec ? statusOf(rec) : 'none';
+  box.hidden = !rec || viewOnly || (st === 'none' && !timeSpent(rec) && !(rec.timeLog || []).length);
+  if (box.hidden) return;
+  const btn = $('#btnTimer');
+  btn.textContent = on ? 'Stop timer' : 'Start timer';
+  btn.classList.toggle('running', on);
+  btn.disabled = !on && !n;
+  btn.title = on ? 'Stop the timer and share its time between the frames being built'
+    : n ? `Time your work; it's shared between the ${n} frame${n === 1 ? '' : 's'} marked Building` : 'Mark a frame as Building first';
+  $('#timeNote').textContent = on
+    ? (st === 'building' ? (n > 1 ? `Timer running - this frame gets 1/${n} of the time (${n} frames being built).` : 'Timer running.')
+      : 'The timer is running for other frames. Mark this one as Building to share in it.')
+    : st === 'building' ? `Start the timer while you work. Its time is split between all the frames marked Building${n > 1 ? ` (${n} now)` : ''}.` : '';
+  renderTimeLog(rec);
+}
+
+// The log, with timer entries grouped into sessions.
+function renderTimeLog(rec) {
+  const groups = new Map();
+  for (const e of rec.timeLog || []) {
+    const key = e.manual ? e.id : 's' + e.session;
+    const g = groups.get(key) || { ids: [], seconds: 0, start: e.start, end: e.end, frames: 0, manual: !!e.manual, note: e.note };
+    g.ids.push(e.id);
+    g.seconds += e.seconds || 0;
+    g.start = Math.min(g.start, e.start);
+    g.end = Math.max(g.end, e.end);
+    g.frames = Math.max(g.frames, e.frames || 1);
+    groups.set(key, g);
+  }
+  const rows = [...groups.values()].sort((a, b) => b.start - a.start);
+  $('#timeLog').innerHTML = rows.length ? `<table class="time-log"><tbody>${rows.map((g) => `<tr>
+      <td>${esc(shortDate(g.start))}<div class="sub">${g.manual ? esc(g.note || 'Added by hand') : `${esc(fmtTime(g.start))} - ${esc(fmtTime(g.end))}${g.frames > 1 ? `, shared by up to ${g.frames} frames` : ''}`}</div></td>
+      <td class="num">${g.seconds < 0 ? '' : '+'}${esc(fmtDuration(g.seconds))}</td>
+      <td><button type="button" class="link danger" data-time="${esc(g.ids.join(','))}" title="Remove this from the log">&times;</button></td>
+    </tr>`).join('')}</tbody></table>` : '<p class="help">No time recorded yet.</p>';
+}
+
+async function toggleTimer() {
+  try {
+    setDb(await api.timer(timerOn() ? 'stop' : 'start'));
+    refreshLists();
+    updateStatus();
+    toast(timerOn() ? 'Timer started' : 'Timer stopped - its time has been shared between the frames being built');
+  } catch (e) { toast(e.message, true); }
+}
+
+async function addTime() {
+  const minutes = parseFloat($('#timeAddMin').value);
+  if (!cur.id || !minutes) { toast('Enter the number of minutes to add.', true); $('#timeAddMin').focus(); return; }
+  try {
+    setDb(await api.addTime(cur.id, minutes, $('#timeAddNote').value.trim()));
+    $('#timeAddMin').value = $('#timeAddNote').value = '';
+    refreshLists();
+    updateStatus();
+    toast(minutes > 0 ? `Added ${fmtDuration(minutes * 60)}` : `Took off ${fmtDuration(-minutes * 60)}`);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function removeTime(ids) {
+  if (!confirm('Remove this time from the log?')) return;
+  try {
+    let res;
+    for (const id of ids) res = await api.deleteTime(cur.id, id);
+    setDb(res);
+    refreshLists();
+    updateStatus();
+  } catch (e) { toast(e.message, true); }
+}
+
+function setupTimer() {
+  $('#btnTimer').onclick = toggleTimer;
+  $('#btnTimerStop').onclick = toggleTimer;
+  $('#btnTimeAdd').onclick = addTime;
+  $('#timeAddMin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTime(); } });
+  $('#timeLog').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-time]');
+    if (b) removeTime(b.dataset.time.split(','));
+  });
+  setInterval(() => { if (timerOn()) tickTimer(); }, 1000);
+  // Pick up changes made on another device (e.g. the timer started on a phone).
+  window.addEventListener('focus', async () => {
+    if (!cur) return;
+    try { setDb(await api.state()); refreshLists(); updateStatus(); } catch { /* offline - keep what we have */ }
+  });
 }
 
 // ---------------------------------------------------------------- Share links
@@ -961,7 +1098,7 @@ function showShare() {
 async function setShare(share) {
   try {
     const res = await api.setShare(cur.id, share);
-    db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
+    setDb(res);
     cur.shareToken = res.painting.shareToken ?? null;
     refreshLists();
     showShare();
@@ -1056,14 +1193,15 @@ function renderLibrary() {
     const h = p.sameHeight ? p.leftHeight : `${f1(p.leftHeight)}/${f1(p.rightHeight)}`;
     return `${typeof w === 'number' ? f1(w) : w} × ${typeof h === 'number' ? f1(h) : h} × ${f1(p.depth)}`;
   };
-  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${
+  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Status</th><th class="num">Time</th><th>Updated</th><th></th></tr></thead><tbody>${
     rows.map((p) => `<tr class="clickable status-${statusOf(p)}" data-id="${p.id}">
       <td><b>${esc(p.sku || '-')}</b>${p.shareToken ? ' <span class="sub" title="Shared with a read-only link">&#128279;</span>' : ''}</td><td>${esc(p.title || '-')}</td><td>${esc(p.artist || '-')}</td>
       <td class="sub">${size(p)}</td>
       <td>${statusPill(p)}</td>
+      <td class="num sub">${(p.timeLog || []).length || (timerOn() && statusOf(p) === 'building') ? esc(fmtDuration(timeSpent(p))) : '-'}</td>
       <td class="sub">${p.updatedAt ? new Date(p.updatedAt * 1000).toLocaleDateString() : ''}</td>
       <td><button type="button" class="link danger" data-del="${p.id}">Delete</button></td></tr>`).join('')
-    || `<tr><td colspan="7" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
+    || `<tr><td colspan="8" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
   }</tbody>`;
 }
 
@@ -1259,12 +1397,12 @@ function bindEvents() {
     e.preventDefault();
     const name = $('#artistName').value.trim();
     if (!name) return;
-    try { db = await api.addArtist(name); $('#artistName').value = ''; refreshLists(); } catch (err) { toast(err.message, true); }
+    try { setDb(await api.addArtist(name)); $('#artistName').value = ''; refreshLists(); } catch (err) { toast(err.message, true); }
   });
   $('#artistTable').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-del-artist]');
     if (!b) return;
-    try { db = await api.deleteArtist(b.dataset.delArtist); refreshLists(); } catch (err) { toast(err.message, true); }
+    try { setDb(await api.deleteArtist(b.dataset.delArtist)); refreshLists(); } catch (err) { toast(err.message, true); }
   });
 
   window.addEventListener('beforeunload', saveDraft);
@@ -1456,8 +1594,9 @@ async function init() {
   $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   bindEvents();
   setupShareDialog();
+  setupTimer();
   try {
-    db = await api.state();
+    setDb(await api.state());
   } catch (e) {
     if (!$('#authScreen').hidden) return;
     toast('Could not reach the server - is it running?', true);

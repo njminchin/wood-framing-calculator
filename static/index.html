@@ -35,6 +35,7 @@
       <div class="status-group">
         <span id="statusBadge" class="status-pill" hidden></span>
         <span id="saveStatus" class="save-status"></span>
+        <span id="timerPill" class="timer-pill" hidden title="The build timer is running"><span id="timerClock"></span><button type="button" id="btnTimerStop" class="link">Stop</button></span>
         <button id="btnReload" type="button" class="link" hidden title="Discard your changes and reload the saved version">&#8635; Reload</button>
       </div>
       <button id="btnShare" type="button" title="Get a read-only link to this frame">Share</button>
@@ -61,6 +62,23 @@
             <button type="button" data-status="none" title="The frame hasn't been started">Not started</button>
             <button type="button" data-status="building" title="The frame is being built now">&#128296; Building</button>
             <button type="button" data-status="made" title="The frame is finished">&#10003; Made</button>
+          </div>
+          <div id="timeBox" class="time-box" hidden>
+            <div class="time-row">
+              <span>&#9201; Time building: <b id="timeTotal"></b></span>
+              <button type="button" id="btnTimer">Start timer</button>
+            </div>
+            <div id="timeNote" class="time-note"></div>
+            <details id="timeDetails" class="more time-details">
+              <summary>Time log</summary>
+              <div id="timeLog"></div>
+              <div class="time-add">
+                <input id="timeAddMin" type="number" step="5" placeholder="Minutes" aria-label="Minutes to add">
+                <input id="timeAddNote" placeholder="Note (optional)" aria-label="Note" maxlength="200">
+                <button type="button" id="btnTimeAdd">Add time</button>
+              </div>
+              <p class="help">For time the timer missed. A negative number takes time off.</p>
+            </details>
           </div>
         </div>
         <div class="field">

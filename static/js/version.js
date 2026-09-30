@@ -7,6 +7,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.0',
+    date: '2026-09-30',
+    changes: [
+      'Track how long each frame takes to build. Mark the frames you’re working on as Building, then press Start timer in the Painting section. The running timer shows at the top, with a Stop button.',
+      'When you’re building several frames at once, the time is split equally between them. If one starts or finishes partway through, the split changes from that moment. The timer stops by itself when nothing is being built.',
+      'Each frame shows its total time and a time log. Add time the timer missed by hand (or take some off), and remove entries you don’t want.',
+      'The Library has a Time column with each frame’s total.',
+    ],
+  },
+  {
     version: '1.6.2',
     date: '2026-09-30',
     changes: [

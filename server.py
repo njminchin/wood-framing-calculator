@@ -167,6 +167,46 @@ def all_artists(db):
     return sorted(names, key=str.casefold)
 
 
+# ---- Build timer ------------------------------------------------------------
+# One workshop timer per library. While it runs, the time is shared equally between
+# the frames marked "building". Whenever that set changes (or the timer stops), the
+# time since the last split is added to each of those frames' timeLog.
+
+def building_paintings(db):
+    return [p for p in db["paintings"] if p.get("status") == "building"]
+
+
+def split_timer(db, now=None):
+    """Credit the running timer's time so far to the frames being built right now."""
+    timer = db.get("timer") or {}
+    if not timer.get("start"):
+        return
+    now = now or time.time()
+    frames = building_paintings(db)
+    seconds = now - timer["segmentStart"]
+    if frames and seconds > 0:
+        for p in frames:
+            p.setdefault("timeLog", []).append({
+                "id": uuid.uuid4().hex[:8], "session": timer["start"],
+                "start": timer["segmentStart"], "end": now,
+                "seconds": seconds / len(frames), "frames": len(frames),
+            })
+    timer["segmentStart"] = now
+
+
+def stop_timer(db):
+    split_timer(db)
+    db["timer"] = {"start": None, "segmentStart": None}
+
+
+def stop_timer_if_idle(db):
+    """Stop the timer when nothing is being built any more. True if it was stopped."""
+    if (db.get("timer") or {}).get("start") and not building_paintings(db):
+        stop_timer(db)
+        return True
+    return False
+
+
 def read_static(url_path):
     """Bytes of a file under static/ (on disk or inside the .pyz), or None."""
     rel = unquote(url_path).lstrip("/") or "index.html"
@@ -226,7 +266,8 @@ class Handler(BaseHTTPRequestHandler):
         return body
 
     def _state(self, db):
-        return {"settings": db["settings"], "paintings": db["paintings"], "artists": all_artists(db)}
+        return {"settings": db["settings"], "paintings": db["paintings"], "artists": all_artists(db),
+                "timer": db.get("timer") or {"start": None, "segmentStart": None}, "now": time.time()}
 
     # ---- accounts ------------------------------------------------------
     def _client_ip(self):
@@ -358,7 +399,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._error(HTTPStatus.NOT_FOUND, "This share link isn't valid any more. Ask the owner for a new one.")
             store, db, painting, owner = found
             if not m.group(2):
-                return self._json({"painting": painting, "settings": db["settings"], "owner": owner})
+                public = {k: v for k, v in painting.items() if k != "timeLog"}
+                return self._json({"painting": public, "settings": db["settings"], "owner": owner})
             if not painting.get("image"):
                 return self._error(HTTPStatus.NOT_FOUND, "Image not found")
             return self._send_image(os.path.join(store.image_dir, painting["image"]))
@@ -441,6 +483,11 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/share", path)
             if m:
                 return self._set_share(store, m.group(1), bool(self._json_body().get("share")))
+            if path == "/api/timer":
+                return self._timer(store, self._json_body().get("action"))
+            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/time", path)
+            if m:
+                return self._add_time(store, m.group(1), self._json_body())
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/status", path)
             if m:
                 return self._set_status(store, m.group(1), self._json_body().get("status"))
@@ -463,6 +510,18 @@ class Handler(BaseHTTPRequestHandler):
         store = self._store()
         if not store:
             return
+        m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/time/([A-Za-z0-9_-]+)", path)
+        if m:
+            with _lock:
+                db = store.load()
+                painting = next((p for p in db["paintings"] if p["id"] == m.group(1)), None)
+                if painting is None:
+                    return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
+                painting["timeLog"] = [e for e in painting.get("timeLog", []) if e.get("id") != m.group(2)]
+                store.save(db)
+                state = self._state(db)
+                state["painting"] = painting
+                return self._json(state)
         m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)(/image)?", path)
         if m:
             pid, image_only = m.group(1), bool(m.group(2))
@@ -475,7 +534,9 @@ class Handler(BaseHTTPRequestHandler):
                 if image_only:
                     painting["image"] = None
                 else:
+                    split_timer(db)
                     db["paintings"] = [p for p in db["paintings"] if p["id"] != pid]
+                    stop_timer_if_idle(db)
                     shares = load_shares()
                     if shares.pop(painting.get("shareToken"), None):
                         save_shares(shares)
@@ -498,7 +559,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = body.get("id")
             existing = next((p for p in db["paintings"] if p["id"] == pid), None) if pid else None
             record = dict(existing or {})
-            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "status", "buildingAt", "madeAt", "shareToken")})
+            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "status", "buildingAt", "madeAt", "shareToken", "timeLog")})
             if existing is None:
                 record["id"] = uuid.uuid4().hex[:12]
                 record["createdAt"] = time.time()
@@ -550,6 +611,7 @@ class Handler(BaseHTTPRequestHandler):
             if painting is None:
                 return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
             now = time.time()
+            split_timer(db, now)  # time so far goes to the frames that were being built
             if status is None:
                 painting["buildingAt"] = painting["madeAt"] = None
             elif status == "building":
@@ -559,6 +621,49 @@ class Handler(BaseHTTPRequestHandler):
             elif painting.get("status") != "made":
                 painting["madeAt"] = now
             painting["status"] = status
+            stopped = stop_timer_if_idle(db)
+            store.save(db)
+            state = self._state(db)
+            state["painting"] = painting
+            state["timerStopped"] = stopped
+            return self._json(state)
+
+    def _timer(self, store, action):
+        """Start or stop the build timer."""
+        with _lock:
+            db = store.load()
+            timer = db.get("timer") or {}
+            if action == "start":
+                if not building_paintings(db):
+                    return self._error(HTTPStatus.BAD_REQUEST, "Mark at least one frame as Building first.")
+                if not timer.get("start"):
+                    now = time.time()
+                    db["timer"] = {"start": now, "segmentStart": now}
+            elif action == "stop":
+                stop_timer(db)
+            else:
+                return self._error(HTTPStatus.BAD_REQUEST, "Unknown action")
+            store.save(db)
+            return self._json(self._state(db))
+
+    def _add_time(self, store, pid, body):
+        """Add (or with negative minutes, take off) time by hand, e.g. when the timer wasn't running."""
+        try:
+            minutes = float(body.get("minutes"))
+        except (TypeError, ValueError):
+            return self._error(HTTPStatus.BAD_REQUEST, "Enter a number of minutes")
+        if not minutes or abs(minutes) > 100 * 60:
+            return self._error(HTTPStatus.BAD_REQUEST, "Enter a number of minutes")
+        with _lock:
+            db = store.load()
+            painting = next((p for p in db["paintings"] if p["id"] == pid), None)
+            if painting is None:
+                return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
+            now = time.time()
+            painting.setdefault("timeLog", []).append({
+                "id": uuid.uuid4().hex[:8], "start": now, "end": now,
+                "seconds": minutes * 60, "manual": True, "note": str(body.get("note") or "")[:200],
+            })
             store.save(db)
             state = self._state(db)
             state["painting"] = painting

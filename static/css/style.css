@@ -349,6 +349,27 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .card.building { box-shadow: var(--shadow), inset 3px 0 0 var(--warn-ink); }
 .card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
 
+/* Build timer */
+.timer-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--warn-ink); background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn-ink) 35%, transparent); border-radius: 99px; padding: 0 4px 0 9px; white-space: nowrap; }
+.timer-pill button { padding: 1px 4px; font-size: 12px; }
+.time-box { border-top: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent); padding-top: 7px; display: grid; gap: 4px; color: var(--text); }
+.time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.time-row b { font-variant-numeric: tabular-nums; }
+.time-row button { padding: 3px 10px; font-size: 12.5px; }
+.time-row button.running { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-ink); }
+.time-note { font-size: 12px; color: var(--muted); }
+.time-note:empty { display: none; }
+.time-details { margin: 2px 0 0; }
+.time-details summary { margin-bottom: 4px; }
+.time-log { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 8px; }
+.time-log td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.time-log td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.time-log .sub { color: var(--muted); }
+.time-log button { padding: 0 4px; font-size: 13px; }
+.time-add { display: flex; gap: 6px; }
+.time-add #timeAddMin { width: 90px; flex: none; }
+.time-add button { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
+
 /* Settings (cutting setup and SKU numbering) */
 .icon-button { font-size: 21px; line-height: 1; padding: 3px 8px; position: relative; }
 .icon-button.changed { border-color: var(--accent); color: var(--accent); }
@@ -361,7 +382,7 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
 .share-banner .sub { color: var(--muted); }
 body.view-only .quickload, body.view-only #btnNew, body.view-only #btnSave, body.view-only #btnSaveAsNew,
-body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #statusSeg,
+body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #statusSeg, body.view-only #timeBox, body.view-only #timerPill,
 body.view-only #btnSaveDefaults, body.view-only #btnResetDefaults, body.view-only #btnGenerateSku,
 body.view-only #btnTour, body.view-only .brand-sub .version-text, body.view-only .image-actions,
 body.view-only #matchHint { display: none !important; }
