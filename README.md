@@ -129,7 +129,7 @@ The address, path and DuckDNS token are remembered, so later updates only need `
 - **Cutting setup**: the distance of the far tape point from the blade, the thickness of one layer of masking tape, which face of the L rides the 45° fence, and the saw kerf.
 - **Cut list**: long-point and short-point lengths for all 8 strips, the corner angles and the mitre angle at each end, and the tape shim for each corner (near the blade or at the far end, and how many layers). It also shows the result you'll actually cut and the expected joint gap.
 - **3D model**: rotate and zoom it, show or hide the painting and the measurements, paint the top of the cheap wood black, see an exploded view, and upload the painting's image (a default image is used otherwise). *Save PNG* saves a picture of the view.
-- **Made**: mark a frame as made once you've built it. It gets a green badge with the date, and the Library can show only the frames not made yet.
+- **Status**: mark each frame as not started, building or made. Building and made frames get a badge with the date, the load list shows each frame's status with an icon, and the Library can filter by status.
 - **Share**: make a read-only link to one frame and send it to someone. They can open it without an account and see the cut list, 3D model and drawing. They can try other frame settings, but nothing they change is saved. *Stop sharing* turns the link off.
 - **Technical drawing**: the front view, section A-A through the L profile, and all 8 strips with dimensions. You can print it or download it as an SVG.
 

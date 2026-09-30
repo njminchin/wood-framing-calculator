@@ -49,7 +49,7 @@ const api = {
   deleteImage: (id) => api.req('DELETE', `api/paintings/${id}/image`),
   setShare: (id, share) => api.req('POST', `api/paintings/${id}/share`, { share }),
   shared: (token) => api.req('GET', `api/share/${encodeURIComponent(token)}`),
-  setMade: (id, made) => api.req('POST', `api/paintings/${id}/made`, { made }),
+  setStatus: (id, status) => api.req('POST', `api/paintings/${id}/status`, { status }),
   addArtist: (name) => api.req('POST', 'api/artists', { name }),
   deleteArtist: (name) => api.req('DELETE', `api/artists/${encodeURIComponent(name)}`),
 };
@@ -74,7 +74,8 @@ function blankPainting() {
     leftHeight: null, rightHeight: null, sameHeight: true,
     depth: null, diagA: null, diagB: null,
     image: null, // saved image filename on the server
-    madeAt: null, // when the frame was marked as made (seconds), saved straight away
+    status: null, // frame status: null (not started), 'building' or 'made'; saved straight away
+    buildingAt: null, madeAt: null, // when it got to that status (seconds)
     pendingImage: null, // data URL of a newly chosen image (uploaded on save)
     removeImage: false,
     settings: { ...db.settings },
@@ -83,7 +84,7 @@ function blankPainting() {
 
 function fromRecord(rec) {
   const p = blankPainting();
-  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
+  for (const k of [...PAINTING_TEXT, ...PAINTING_NUM, ...PAINTING_BOOL, 'id', 'image', 'updatedAt', 'status', 'buildingAt', 'madeAt', 'shareToken']) if (k in rec) p[k] = rec[k];
   p.settings = { ...db.settings, ...(rec.settings || {}) };
   return p;
 }
@@ -649,7 +650,7 @@ async function reloadSaved() {
 
 function updateStatus() {
   updateDefaultsButtons();
-  updateMade();
+  updateFrameStatus();
   $('#btnSaveAsNew').disabled = !cur.id; // only useful once a saved painting is loaded
   const el = $('#saveStatus');
   const changes = markChanges();
@@ -672,7 +673,11 @@ const paintingLabel = (p) => [p.sku, p.title, p.artist].filter(Boolean).join(' �
 function refreshLists() {
   const opt = (v) => `<option value="${esc(v)}"></option>`;
   const sorted = [...db.paintings].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  $('#dlPaintings').innerHTML = sorted.map((p) => opt(paintingLabel(p))).join('');
+  // Each saved painting with its status icon in front and the status name beside it.
+  $('#dlPaintings').innerHTML = sorted.map((p) => {
+    const st = STATUS[statusOf(p)];
+    return `<option value="${esc(`${st.icon} ${paintingLabel(p)}`)}" label="${st.label}"></option>`;
+  }).join('');
   $('#dlSkus').innerHTML = [...new Set(sorted.map((p) => p.sku).filter(Boolean))].map(opt).join('');
   $('#dlTitles').innerHTML = [...new Set(sorted.map((p) => p.title).filter(Boolean))].map(opt).join('');
   $('#dlArtists').innerHTML = db.artists.map(opt).join('');
@@ -867,7 +872,7 @@ async function saveAsNew() {
   cur.id = null;
   cur.image = null;
   cur.removeImage = false;
-  cur.madeAt = null; // the copy's frame hasn't been made yet
+  cur.status = cur.buildingAt = cur.madeAt = null; // the copy's frame hasn't been started
   cur.shareToken = null;
   await save('Saved as a new painting');
 }
@@ -888,44 +893,56 @@ async function deletePainting(id) {
   } catch (e) { toast(e.message, true); }
 }
 
-// ---------------------------------------------------------------- Made
-// A frame can be marked as made. This is saved straight away (it isn't one of
-// the painting's values, so it doesn't count as an unsaved change).
-const madeDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-
-function updateMade() {
-  const made = !!(cur.id && cur.madeAt);
-  const box = $('#madeBox');
-  box.classList.toggle('is-made', made);
-  $('#madeBadge').hidden = !made;
-  $('#madeBadge').title = made ? `This frame was made on ${madeDate(cur.madeAt)}` : '';
-  $('#cardPainting').classList.toggle('made', made);
-  const text = $('#madeText'), btn = $('#btnMade');
-  btn.disabled = !cur.id;
-  if (made) {
-    text.innerHTML = `<b>&#10003; Made</b> on ${esc(madeDate(cur.madeAt))}`
-      + (isDirty() && !viewOnly ? '<span class="made-warn">You’re changing a frame that’s already been made.</span>' : '');
-    btn.textContent = 'Not made';
-    btn.title = 'Mark this frame as not made yet';
-  } else {
-    text.textContent = cur.id ? 'Frame not made yet' : 'Save the painting to mark its frame as made';
-    btn.textContent = 'Mark as made';
-    btn.title = cur.id ? 'Record that this frame has been made' : 'Save the painting first';
-  }
+// ---------------------------------------------------------------- Frame status
+// Where each frame is up to: not started, building or made. Saved straight away
+// (it isn't one of the painting's values, so it doesn't count as an unsaved change).
+const STATUS = {
+  none: { label: 'Not started', icon: '\u25CB' },
+  building: { label: 'Building', icon: '\u{1F528}' },
+  made: { label: 'Made', icon: '\u2705' },
+};
+// Paintings marked as made before there was a status only have madeAt.
+const statusOf = (p) => (p && (p.status || (p.madeAt ? 'made' : null))) || 'none';
+const shortDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+function statusSince(p) {
+  const st = statusOf(p), t = st === 'made' ? p.madeAt : st === 'building' ? p.buildingAt : null;
+  return t ? `${st === 'made' ? 'on' : 'since'} ${shortDate(t)}` : '';
 }
 
-async function toggleMade() {
-  if (!cur.id) return;
-  const made = !cur.madeAt;
-  if (!made && !confirm('Mark this frame as not made yet?')) return;
+function updateFrameStatus() {
+  const st = cur.id ? statusOf(cur) : 'none';
+  $('#statusBox').className = `status-box ${st}`;
+  const badge = $('#statusBadge');
+  badge.hidden = st === 'none';
+  badge.className = `status-pill ${st}`;
+  badge.textContent = st === 'made' ? '\u2713 Made' : `${STATUS[st].icon} ${STATUS[st].label}`;
+  badge.title = st === 'none' ? '' : `${STATUS[st].label} ${statusSince(cur)}`;
+  for (const c of ['building', 'made']) $('#cardPainting').classList.toggle(c, st === c);
+  for (const b of $$('#statusSeg button')) {
+    b.classList.toggle('active', b.dataset.status === st);
+    b.disabled = !cur.id;
+  }
+  const text = $('#statusText');
+  if (!cur.id) { text.textContent = 'Save the painting to track whether its frame is being built or made.'; return; }
+  const since = esc(statusSince(cur));
+  const warn = isDirty() && !viewOnly && st !== 'none'
+    ? `<span class="status-warn">You\u2019re changing a frame that\u2019s ${st === 'made' ? 'already been made' : 'being built'}.</span>` : '';
+  text.innerHTML = st === 'made' ? `<b>\u2713 Made</b> ${since}${warn}`
+    : st === 'building' ? `<b>\u{1F528} Building</b> ${since}${warn}`
+    : 'Frame not started';
+}
+
+async function setFrameStatus(st) {
+  if (!cur.id || st === statusOf(cur)) return;
+  if (st === 'none' && !confirm('Mark this frame as not started?')) return;
   try {
-    const res = await api.setMade(cur.id, made);
+    const res = await api.setStatus(cur.id, st === 'none' ? null : st);
     db = { settings: res.settings, paintings: res.paintings, artists: res.artists };
-    cur.madeAt = res.painting.madeAt ?? null;
+    for (const k of ['status', 'buildingAt', 'madeAt']) cur[k] = res.painting[k] ?? null;
     refreshLists();
     updateStatus();
     saveDraft();
-    toast(made ? 'Marked as made' : 'Marked as not made');
+    toast(st === 'made' ? 'Marked as made' : st === 'building' ? 'Marked as building' : 'Marked as not started');
   } catch (e) { toast(e.message, true); }
 }
 
@@ -1018,11 +1035,18 @@ function updateImageUi() {
 }
 
 // ---------------------------------------------------------------- Library dialog
+function statusPill(p) {
+  const st = statusOf(p);
+  if (st === 'none') return '<span class="sub">Not started</span>';
+  const icon = st === 'made' ? '\u2713' : STATUS.building.icon;
+  return `<span class="status-pill ${st}" title="${esc(statusSince(p))}">${icon} ${STATUS[st].label}</span>`;
+}
+
 function renderLibrary() {
   const q = norm($('#libSearch').value);
-  const show = $('#libMade').value;
+  const show = $('#libStatus').value;
   const rows = [...db.paintings]
-    .filter((p) => show === 'all' || (show === 'made') === !!p.madeAt)
+    .filter((p) => show === 'all' || (show === 'notmade' ? statusOf(p) !== 'made' : statusOf(p) === show))
     .filter((p) => !q || [p.sku, p.title, p.artist].some((v) => norm(v).includes(q)))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const size = (p) => {
@@ -1030,11 +1054,11 @@ function renderLibrary() {
     const h = p.sameHeight ? p.leftHeight : `${f1(p.leftHeight)}/${f1(p.rightHeight)}`;
     return `${typeof w === 'number' ? f1(w) : w} × ${typeof h === 'number' ? f1(h) : h} × ${f1(p.depth)}`;
   };
-  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Made</th><th>Updated</th><th></th></tr></thead><tbody>${
-    rows.map((p) => `<tr class="clickable${p.madeAt ? ' made' : ''}" data-id="${p.id}">
+  $('#libTable').innerHTML = `<thead><tr><th>SKU</th><th>Title</th><th>Artist</th><th>Size (W × H × D)</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${
+    rows.map((p) => `<tr class="clickable status-${statusOf(p)}" data-id="${p.id}">
       <td><b>${esc(p.sku || '-')}</b>${p.shareToken ? ' <span class="sub" title="Shared with a read-only link">&#128279;</span>' : ''}</td><td>${esc(p.title || '-')}</td><td>${esc(p.artist || '-')}</td>
       <td class="sub">${size(p)}</td>
-      <td>${p.madeAt ? `<span class="made-pill" title="Made on ${esc(madeDate(p.madeAt))}">&#10003; ${esc(madeDate(p.madeAt))}</span>` : '<span class="sub">-</span>'}</td>
+      <td>${statusPill(p)}</td>
       <td class="sub">${p.updatedAt ? new Date(p.updatedAt * 1000).toLocaleDateString() : ''}</td>
       <td><button type="button" class="link danger" data-del="${p.id}">Delete</button></td></tr>`).join('')
     || `<tr><td colspan="7" class="sub">${db.paintings.length ? 'No matches.' : 'Nothing saved yet - fill in a painting and press Save.'}</td></tr>`
@@ -1100,8 +1124,10 @@ function bindEvents() {
   });
 
   $('#quickLoad').addEventListener('change', (e) => {
-    const v = e.target.value.trim();
+    let v = e.target.value.trim();
     if (!v) return;
+    const st = Object.values(STATUS).find((x) => v.startsWith(x.icon + ' '));
+    if (st) v = v.slice(st.icon.length + 1).trim();
     const rec = db.paintings.find((p) => paintingLabel(p) === v)
       || db.paintings.find((p) => norm(p.sku) === norm(v) || norm(p.title) === norm(v));
     if (rec) { loadPainting(rec.id); e.target.value = ''; }
@@ -1112,7 +1138,7 @@ function bindEvents() {
   $('#btnSave').onclick = () => save();
   $('#btnSaveAsNew').onclick = saveAsNew;
   $('#btnReload').onclick = reloadSaved;
-  $('#btnMade').onclick = toggleMade;
+  for (const b of $$('#statusSeg button')) b.onclick = () => setFrameStatus(b.dataset.status);
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAsNew(); else save(); }
   });
@@ -1209,7 +1235,7 @@ function bindEvents() {
   $('#libClose').onclick = () => dlg.close();
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
   $('#libSearch').addEventListener('input', renderLibrary);
-  $('#libMade').addEventListener('change', renderLibrary);
+  $('#libStatus').addEventListener('change', renderLibrary);
   $('#libTable').addEventListener('click', (e) => {
     const del = e.target.closest('[data-del]');
     if (del) { e.stopPropagation(); deletePainting(del.dataset.del); return; }

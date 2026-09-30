@@ -32,7 +32,7 @@
       <span class="sub">You can try other frame settings; nothing is saved.</span>
     </div>
     <div class="actions">
-      <span id="madeBadge" class="made-pill" hidden>&#10003; Made</span>
+      <span id="statusBadge" class="status-pill" hidden></span>
       <span id="saveStatus" class="save-status"></span>
       <button id="btnReload" type="button" class="link" hidden title="Discard your changes and reload the saved version">&#8635; Reload</button>
       <button id="btnNew" type="button">New</button>
@@ -52,9 +52,13 @@
     <aside class="sidebar" id="form">
       <section class="card" id="cardPainting">
         <h2>Painting</h2>
-        <div id="madeBox" class="made-box">
-          <span id="madeText"></span>
-          <button id="btnMade" type="button">Mark as made</button>
+        <div id="statusBox" class="status-box">
+          <div id="statusText" class="status-text"></div>
+          <div class="seg status-seg" id="statusSeg" role="group" aria-label="Frame status">
+            <button type="button" data-status="none" title="The frame hasn't been started">Not started</button>
+            <button type="button" data-status="building" title="The frame is being built now">&#128296; Building</button>
+            <button type="button" data-status="made" title="The frame is finished">&#10003; Made</button>
+          </div>
         </div>
         <div class="field">
           <label for="f-sku">SKU</label>
@@ -299,9 +303,11 @@
     <div data-libpanel="paintings">
       <div class="lib-filters">
         <input id="libSearch" type="search" placeholder="Filter by SKU, title or artist…">
-        <select id="libMade" aria-label="Show">
+        <select id="libStatus" aria-label="Show">
           <option value="all">All paintings</option>
           <option value="notmade">Not made yet</option>
+          <option value="none">Not started</option>
+          <option value="building">Building</option>
           <option value="made">Made</option>
         </select>
       </div>

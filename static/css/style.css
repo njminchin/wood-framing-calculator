@@ -328,15 +328,24 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 #libSearch { margin-bottom: 0; flex: 1; }
 .lib-filters { display: flex; gap: 8px; margin-bottom: 10px; }
 .lib-filters select { width: auto; }
-.table tbody tr.made td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+.table tbody tr.status-building td:first-child { box-shadow: inset 3px 0 0 var(--warn-ink); }
+.table tbody tr.status-made td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
 
-/* Made */
-.made-pill { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--ok); background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
-.made-box { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; font-size: 12.5px; color: var(--muted); padding: 6px 10px; margin: -2px 0 12px; border: 1px dashed var(--line-strong); border-radius: 7px; }
-.made-box button { padding: 3px 10px; font-size: 12.5px; }
-.made-box.is-made { color: var(--text); background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
-.made-box.is-made b { color: var(--ok); }
-.made-warn { display: block; color: var(--warn-ink); font-size: 12px; margin-top: 2px; }
+/* Frame status: not started / building / made */
+.status-pill { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 1px 8px; white-space: nowrap; border: 1px solid transparent; }
+.status-pill.made { color: var(--ok); background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.status-pill.building { color: var(--warn-ink); background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn-ink) 35%, transparent); }
+.status-box { font-size: 12.5px; color: var(--muted); padding: 8px 10px; margin: -2px 0 12px; border: 1px dashed var(--line-strong); border-radius: 7px; display: grid; gap: 7px; }
+.status-seg { display: flex; }
+.status-seg button { flex: 1; padding: 4px 6px; font-size: 12.5px; }
+.status-seg button[data-status="building"].active { background: var(--warn-bg); color: var(--warn-ink); }
+.status-seg button[data-status="made"].active { background: var(--ok-soft); color: var(--ok); }
+.status-box.building { color: var(--text); background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn-ink) 35%, transparent); }
+.status-box.building b { color: var(--warn-ink); }
+.status-box.made { color: var(--text); background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.status-box.made b { color: var(--ok); }
+.status-warn { display: block; color: var(--warn-ink); font-size: 12px; margin-top: 2px; }
+.card.building { box-shadow: var(--shadow), inset 3px 0 0 var(--warn-ink); }
 .card.made { box-shadow: var(--shadow), inset 3px 0 0 var(--ok); }
 
 /* Share links */
@@ -344,11 +353,11 @@ details.more summary { cursor: pointer; font-size: 12.5px; color: var(--accent);
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
 .share-banner .sub { color: var(--muted); }
 body.view-only .quickload, body.view-only #btnNew, body.view-only #btnSave, body.view-only #btnSaveAsNew,
-body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #btnMade,
+body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #statusSeg,
 body.view-only #btnSaveDefaults, body.view-only #btnResetDefaults, body.view-only #btnGenerateSku,
 body.view-only #btnTour, body.view-only .brand-sub .version-text, body.view-only .image-actions,
 body.view-only #matchHint { display: none !important; }
-body.view-only .made-box:not(.is-made) { display: none; }
+body.view-only .status-box.none { display: none; }
 .dialog .table-wrap { max-height: 60vh; overflow: auto; box-shadow: none; }
 .inline-form { display: flex; gap: 8px; margin-bottom: 10px; }
 

@@ -7,6 +7,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.0',
+    date: '2026-09-30',
+    changes: [
+      'Frames now have a status: Not started, 🔨 Building or ✓ Made. Set it with the three buttons at the top of the Painting section; it’s saved straight away with the date.',
+      'A frame that’s being built shows an amber badge, like the green one for made frames, and you’re warned if you start changing it.',
+      'The list for loading a saved painting shows each frame’s status with an icon (○ not started, 🔨 building, ✅ made).',
+      'The Library has a Status column and can show only the frames not started, being built, made, or not made yet.',
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-09-29',
     changes: [

@@ -441,9 +441,9 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/share", path)
             if m:
                 return self._set_share(store, m.group(1), bool(self._json_body().get("share")))
-            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/made", path)
+            m = re.fullmatch(r"/api/paintings/([A-Za-z0-9_-]+)/status", path)
             if m:
-                return self._set_made(store, m.group(1), bool(self._json_body().get("made")))
+                return self._set_status(store, m.group(1), self._json_body().get("status"))
             if path == "/api/artists":
                 name = str(self._json_body().get("name", "")).strip()
                 if not name:
@@ -498,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
             pid = body.get("id")
             existing = next((p for p in db["paintings"] if p["id"] == pid), None) if pid else None
             record = dict(existing or {})
-            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "madeAt", "shareToken")})
+            record.update({k: v for k, v in body.items() if k not in ("id", "image", "createdAt", "status", "buildingAt", "madeAt", "shareToken")})
             if existing is None:
                 record["id"] = uuid.uuid4().hex[:12]
                 record["createdAt"] = time.time()
@@ -540,14 +540,25 @@ class Handler(BaseHTTPRequestHandler):
             state["painting"] = painting
             return self._json(state)
 
-    def _set_made(self, store, pid, made):
-        """Mark a painting's frame as made (with the time) or not made yet."""
+    def _set_status(self, store, pid, status):
+        """Set where the frame is up to: None (not started), "building" or "made", with the time."""
+        if status not in (None, "building", "made"):
+            return self._error(HTTPStatus.BAD_REQUEST, "Unknown status")
         with _lock:
             db = store.load()
             painting = next((p for p in db["paintings"] if p["id"] == pid), None)
             if painting is None:
                 return self._error(HTTPStatus.NOT_FOUND, "Painting not found")
-            painting["madeAt"] = time.time() if made else None
+            now = time.time()
+            if status is None:
+                painting["buildingAt"] = painting["madeAt"] = None
+            elif status == "building":
+                if painting.get("status") != "building":
+                    painting["buildingAt"] = now
+                painting["madeAt"] = None
+            elif painting.get("status") != "made":
+                painting["madeAt"] = now
+            painting["status"] = status
             store.save(db)
             state = self._state(db)
             state["painting"] = painting
