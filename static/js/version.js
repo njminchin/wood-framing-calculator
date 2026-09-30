@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.1',
+    date: '2026-09-30',
+    changes: [
+      'Fixed the page being wider than the screen on narrow phones, which cut off buttons on the right and could hide the timer dock. Everything now fits down to 300 px wide.',
+      'The page now checks for changes made on another device (such as the timer being started) when you switch back to it, and every minute while it’s open, so the timer dock shows up without reloading.',
+      'On phones, the tabs and top buttons are a little more compact so they fit on one row.',
+    ],
+  },
+  {
     version: '1.8.0',
     date: '2026-09-30',
     changes: [

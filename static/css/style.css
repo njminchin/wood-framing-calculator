@@ -161,8 +161,11 @@ input.invalid { border-color: var(--err-ink); }
 .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
 .field label { font-size: 12.5px; color: var(--muted); }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; margin-top: 2px; }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.row-wide { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+/* minmax(0, ...) and min-width: 0 let inputs shrink below their built-in width on narrow phones. */
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.row-wide { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
+.field { min-width: 0; }
+input, select { min-width: 0; }
 .input-with-button { display: flex; gap: 6px; }
 .input-with-button input { flex: 1; }
 .sku-warning { color: var(--warn-ink); }
@@ -173,7 +176,7 @@ input.invalid { border-color: var(--err-ink); }
   font-size: 12.5px; background: var(--accent-soft); border-radius: 7px; padding: 7px 10px;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
-.measure-wrap { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; }
+.measure-wrap { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: center; }
 .measure-diagram { width: 100%; color: var(--muted); font-size: 10px; }
 .measure-diagram text { fill: var(--muted); }
 details.more { margin-top: 2px; }
@@ -491,8 +494,9 @@ details.more > summary.changed::after { content: " \2022 changed"; font-weight: 
 [hidden] { display: none !important; }
 
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-  .guide { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout > * { min-width: 0; }
+  .guide { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Phones: search on its own row, then the status, then the buttons sharing the width. */
@@ -502,10 +506,16 @@ details.more > summary.changed::after { content: " \2022 changed"; font-weight: 
   .actions { flex-wrap: wrap; width: 100%; margin-left: 0; gap: 6px; }
   .status-group { flex-basis: 100%; min-height: 22px; }
   .status-group:not(:has(:not([hidden]):not(:empty))) { display: none; }
-  .actions > button { flex: 1 1 auto; padding: 7px 8px; }
-  .actions > .icon-button { flex: 0 0 auto; }
+  .actions > button { flex: 1 1 auto; padding: 7px 6px; font-size: 13px; }
+  .actions > .icon-button { flex: 0 0 auto; font-size: 19px; padding: 4px 7px; }
   .user-menu { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; padding-left: 0; border-left: none; }
   .share-banner { flex-basis: 100%; }
+  .layout { padding: 12px 10px 20px; gap: 12px; }
+  .tabs { overflow-x: auto; scrollbar-width: none; gap: 0; }
+  .tabs button { flex: none; padding: 9px 10px; white-space: nowrap; }
+  .card { padding-left: 12px; padding-right: 12px; }
+  .user-menu { gap: 4px 8px; }
+  .user-menu .link { padding-left: 0; padding-right: 0; }
 }
 
 @media print {

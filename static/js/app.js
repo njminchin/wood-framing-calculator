@@ -1158,11 +1158,19 @@ function setupTimer() {
     if (b) removeTime(b.dataset.time.split(','));
   });
   setInterval(() => { if (timerOn()) tickTimer(); }, 1000);
-  // Pick up changes made on another device (e.g. the timer started on a phone).
-  window.addEventListener('focus', async () => {
-    if (!cur) return;
+  // Pick up changes made on another device (e.g. the timer started on a phone): when the
+  // page comes back into view (phones don't always send "focus"), and every minute while it's open.
+  let refreshing = false;
+  const refresh = async () => {
+    if (!cur || refreshing || document.hidden) return;
+    refreshing = true;
     try { setDb(await api.state()); refreshLists(); updateStatus(); } catch { /* offline - keep what we have */ }
-  });
+    refreshing = false;
+  };
+  window.addEventListener('focus', refresh);
+  document.addEventListener('visibilitychange', refresh);
+  window.addEventListener('pageshow', (e) => { if (e.persisted) refresh(); }); // back from the browser's page cache
+  setInterval(refresh, 60 * 1000);
 }
 
 // ---------------------------------------------------------------- Share links
