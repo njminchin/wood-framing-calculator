@@ -1,4 +1,4 @@
-import { computeFrame, solveQuad, FENCE_FACES, onInnerSide } from './geometry.js';
+import { computeFrame, solveQuad, FENCE_FACES, onInnerSide, CORNER_SYMBOL } from './geometry.js';
 import { buildDrawing } from './drawing.js';
 import { SPECIES } from './textures.js';
 import { VERSION, CHANGELOG } from './version.js';
@@ -74,7 +74,7 @@ let frame = null;
 let viewer = null;
 let activeTab = 'cut';
 let drawingDirty = true, modelDirty = true;
-let selectedCorner = null; // corner index shown in the tape guide, or null for the general view
+let selectedEnd = null; // the piece end (e.g. 'top:TL') shown on the sled diagram, or null for the general view
 // Opened from a share link: the painting is read only, the frame settings can be tried out but aren't saved.
 const SHARE_TOKEN = new URLSearchParams(location.search).get('share');
 const viewOnly = !!SHARE_TOKEN;
@@ -215,9 +215,9 @@ const tapeKey = (t) => (t.invalid ? 'invalid' : t.layers === 0 ? 'none' : `${t.l
 const tapeText = (t) => (t.invalid ? 'check setup' : t.layers === 0 ? 'no tape' : `${t.location === 'far' ? 'FAR' : 'NEAR'} ×${t.layers}`);
 const tapeClass = (t) => (t.invalid || t.layers === 0 ? 'none' : t.location);
 
-// The tape setup as a chip; tapping it shows that setup on the sled diagram.
-function tapeChip(t, ci, big = false) {
-  return `<button type="button" class="tape-chip ${tapeClass(t)}${big ? ' big' : ''}${ci === selectedCorner ? ' selected' : ''}" data-corner="${ci}" title="Show this setup on the sled diagram">${tapeText(t)}</button>`;
+// The tape setup as a chip; tapping it shows that end's setup on the sled diagram.
+function tapeChip(t, e, big = false) {
+  return `<button type="button" class="tape-chip ${tapeClass(t)}${big ? ' big' : ''}${e.cut === selectedEnd ? ' selected' : ''}" data-end="${e.cut}" title="Show this setup on the sled diagram">${tapeText(t)}</button>`;
 }
 
 function tapeWords(t) {
@@ -226,21 +226,41 @@ function tapeWords(t) {
   return `${t.layers} layer${t.layers === 1 ? '' : 's'} (${f2(t.shim)} mm) at the ${t.location === 'far' ? 'FAR point' : 'NEAR point, by the blade'}`;
 }
 
+// The sled has two 45\u00B0 fences in a V, one each side of the blade. A piece's two ends are
+// mirror images, so they're cut on opposite fences, and the two mating cuts at every corner
+// always end up on opposite fences, which cancels out any error in the jig's angles.
+// These ends go on the right-hand fence (as you stand at the sled) with the L the right way
+// up; turning the L upside down (good wood inner face against the fence) swaps them over.
+const RIGHT_FENCE_UPRIGHT = new Set(['top:TL', 'bottom:BR', 'left:BL', 'right:TR']);
+function fenceFor(cut, s = settingsInput()) {
+  const upsideDown = s.fenceEdge === 'goodInner';
+  return RIGHT_FENCE_UPRIGHT.has(cut) !== upsideDown ? 'right' : 'left';
+}
+const fenceName = (f) => (f === 'right' ? 'R fence' : 'L fence');
+const fenceBadge = (f) => `<span class="fence-badge ${f}" title="Cut on the ${f}-hand fence">${fenceName(f)}</span>`;
+
+// The corner's symbol (see CORNER_SYMBOL), to pencil on both mating ends.
+const symbolBadge = (key) => `<span class="corner-symbol" title="Mark this end with ${CORNER_SYMBOL[key]} - it joins the other ${CORNER_SYMBOL[key]} end at the ${key} corner">${CORNER_SYMBOL[key]}</span>`;
+
 // A piece's two ends in reading order: left then right for Top/Bottom, top then bottom
-// for Left/Right. Each is { strip, ci (corner index), key (e.g. 'TL'), label, cut (tick key) }.
+// for Left/Right. Each is { strip, ci (corner index), key (e.g. 'TL'), label, cut (tick key), fence }.
 function pieceEnds(frame, st) {
   const horizontal = st.key === 'top' || st.key === 'bottom';
   const ends = st.corners.map((ci) => ({ strip: st, ci, key: frame.corners[ci].key }));
   ends.sort((a, b) => (horizontal ? (a.key[1] === 'L' ? -1 : 1) : (a.key[0] === 'T' ? -1 : 1)));
   const labels = horizontal ? ['left end', 'right end'] : ['top end', 'bottom end'];
-  return ends.map((e, i) => ({ ...e, label: labels[i], cut: `${st.key}:${e.key}` }));
+  return ends.map((e, i) => {
+    const cut = `${st.key}:${e.key}`;
+    return { ...e, label: labels[i], cut, fence: fenceFor(cut) };
+  });
 }
+const findEnd = (frame, cut) => frame.strips.flatMap((st) => pieceEnds(frame, st)).find((e) => e.cut === cut) || null;
 
 // Rows in Top, Bottom, Left, Right order. Opposite pieces that come out the same (length,
 // and the angle and tape at each end) share a row, with their matching ends side by side.
 function pieceRows(frame) {
   const byKey = Object.fromEntries(frame.strips.map((st) => [st.key, st]));
-  const sig = (e) => `${f2(frame.corners[e.ci].mitre)}|${tapeKey(frame.corners[e.ci].tape)}`;
+  const sig = (e) => `${f2(frame.corners[e.ci].mitre)}|${tapeKey(frame.corners[e.ci].tape)}|${e.fence}`;
   const rows = [];
   for (const [a, b, name] of [['top', 'bottom', 'Top & Bottom'], ['left', 'right', 'Left & Right']]) {
     const A = byKey[a], B = byKey[b];
@@ -257,7 +277,7 @@ function pieceRows(frame) {
 // ---- ticking cuts off
 // Identifies the cut plan: if lengths or tape setups change, earlier ticks no longer apply.
 function cutPlanSig(frame) {
-  return frame.strips.map((st) => `${st.key}:${f1(st.good.longPoint)}:${st.corners.map((ci) => frame.corners[ci].key + tapeKey(frame.corners[ci].tape)).join(',')}`).join('|');
+  return frame.strips.map((st) => `${st.key}:${f1(st.good.longPoint)}:${pieceEnds(frame, st).map((e) => e.key + tapeKey(frame.corners[e.ci].tape) + e.fence[0]).join(',')}`).join('|');
 }
 const cutsDone = () => (cur.cuts && frame && frame.ok && cur.cuts.sig === cutPlanSig(frame) ? cur.cuts.done || {} : {});
 const staleCuts = () => !!(cur.cuts && frame && frame.ok && cur.cuts.sig !== cutPlanSig(frame) && Object.keys(cur.cuts.done || {}).length);
@@ -327,9 +347,11 @@ function renderCutList() {
   // ---- by piece
   const endCell = (entries) => {
     const c = frame.corners[entries[0].ci];
-    const where = entries.length > 1 ? entries.map((e) => e.key).join(' / ') : `${entries[0].label} · ${entries[0].key}`;
+    const where = entries.length > 1
+      ? entries.map((e) => `${symbolBadge(e.key)} ${e.key}`).join(' / ')
+      : `${symbolBadge(entries[0].key)} ${entries[0].label} \u00B7 ${entries[0].key}`;
     const ticks = viewOnly ? '' : `<div class="ticks">${entries.map((e) => tickBox(e, entries.length > 1 ? e.strip.name : 'cut')).join('')}</div>`;
-    return `<td class="end-cell"><div class="end-main"><span class="angle">${f2(c.mitre)}°</span> ${tapeChip(c.tape, entries[0].ci)}</div><div class="sub">${where}</div>${ticks}</td>`;
+    return `<td class="end-cell"><div class="end-main"><span class="angle">${f2(c.mitre)}\u00B0</span> ${tapeChip(c.tape, entries[0])} ${fenceBadge(entries[0].fence)}</div><div class="sub">${where}</div>${ticks}</td>`;
   };
   const pieceTable = pieceRows(frame).map((r) => {
     const cuts = r.ends.flat().map((e) => e.cut);
@@ -349,19 +371,20 @@ function renderCutList() {
   for (const key of ['top', 'bottom', 'left', 'right']) {
     const st = frame.strips.find((x) => x.key === key);
     for (const e of pieceEnds(frame, st)) {
-      const t = frame.corners[e.ci].tape, k = tapeKey(t);
-      if (!groups.has(k)) groups.set(k, { t, items: [] });
+      // Each fence is taped separately, so a setup is per fence.
+      const t = frame.corners[e.ci].tape, k = `${e.fence}|${tapeKey(t)}`;
+      if (!groups.has(k)) groups.set(k, { t, fence: e.fence, items: [] });
       groups.get(k).items.push(e);
     }
   }
-  const order = (g) => (g.t.invalid ? 9e3 : g.t.layers === 0 ? 0 : (g.t.location === 'far' ? 1000 : 2000) + g.t.layers);
+  const order = (g) => (g.fence === 'left' ? 0 : 10000) + (g.t.invalid ? 9e3 : g.t.layers === 0 ? 0 : (g.t.location === 'far' ? 1000 : 2000) + g.t.layers);
   const tapeGroups = [...groups.values()].sort((a, b) => order(a) - order(b)).map((g) => {
     const left = g.items.filter((e) => !done[e.cut]).length;
     return `<div class="tape-group${left ? '' : ' group-done'}">
-      <div class="tape-group-head">${tapeChip(g.t, g.items[0].ci, true)} <span>${tapeWords(g.t)}</span> <span class="sub">${left ? `${left} of ${g.items.length} cut${g.items.length === 1 ? '' : 's'} left` : 'all done'}</span></div>
+      <div class="tape-group-head">${fenceBadge(g.fence)} ${tapeChip(g.t, g.items[0], true)} <span>${tapeWords(g.t)}</span> <span class="sub">${left ? `${left} of ${g.items.length} cut${g.items.length === 1 ? '' : 's'} left` : 'all done'}</span></div>
       <ul class="tape-cuts">${g.items.map((e) => `<li class="${done[e.cut] ? 'cut-done' : ''}">
         ${viewOnly ? '' : tickBox(e)}
-        <span><b>${e.strip.name}</b> ${e.label} <span class="sub">${e.key}</span></span>
+        <span>${symbolBadge(e.key)} <b>${e.strip.name}</b> ${e.label} <span class="sub">${e.key}</span></span>
         <span class="angle">${f2(frame.corners[e.ci].mitre)}°</span>
         <span class="cut-hint">${lengthHint(frame, e)}</span>
       </li>`).join('')}</ul>
@@ -370,11 +393,11 @@ function renderCutList() {
 
   const dg = frame.diagonals;
   const diagDiff = (d) => Math.abs(d.a - d.b);
-  const cornerRows = frame.corners.map((c, i) => `<tr class="clickable${i === selectedCorner ? ' selected' : ''}" data-corner="${i}" title="Show this corner in the tape diagram">
-      <td><b>${c.key}</b> <span class="sub">${c.name}</span></td>
+  const cornerRows = frame.corners.map((c) => `<tr>
+      <td>${symbolBadge(c.key)} <b>${c.key}</b> <span class="sub">${c.name}</span></td>
       <td class="num">${f2(c.angle)}°</td>
       <td class="num angle">${f2(c.mitre)}°</td>
-      <td>${tapeChip(c.tape, i)}</td>
+      <td><span class="tape-chip ${tapeClass(c.tape)}">${tapeText(c.tape)}</span></td>
       <td class="num">${f2(c.tape.result)}°</td>
       <td class="num">${Math.abs(c.tape.error) < 0.005 ? '0.00' : (c.tape.error > 0 ? '+' : '') + f2(c.tape.error)}°</td>
       <td class="num">${c.jointOpening < 0.05 ? '<span class="sub">&lt; 0.05</span>' : f2(c.jointOpening)} <span class="sub">${c.jointOpening < 0.05 ? '' : c.openingAt === 'inner' ? 'inside' : 'outside'}</span></td>
@@ -406,30 +429,31 @@ function renderCutList() {
       <button type="button" class="workshop-btn" data-workshop>&#9974; Workshop view</button>
     </div>
     ${staleCuts() ? '<div class="alert warn">The measurements or cutting setup changed since you ticked cuts, so those ticks have been cleared.</div>' : ''}
-    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then mitre both ends of the L in one cut. Cut to the <b>long point</b>: the outer (visible) edge of the good wood. Tap a tape setup to see it on the sled diagram below.</p>
+    <p class="note" style="margin-top:0">Glue each cheap strip to its good wood strip ${frame.inside ? '(against the inside face, at the back)' : '(underneath, outer edges flush)'}, then mitre both ends of the L in one cut. Cut to the <b>long point</b>: the outer (visible) edge of the good wood. Each piece's two ends go on opposite fences (<b>L</b> or <b>R</b>, as you stand at the sled). Pencil each end's symbol on it: ends with the same symbol join at a corner (\u25CB top-left, \u25B3 top-right, \u25A1 bottom-right, \u2715 bottom-left). Tap a tape setup to see it on the sled diagram below.</p>
     ${view === 'piece' ? `
     <div class="table-wrap"><table class="table cut-table">
       <thead><tr><th>Piece</th><th class="num">Cut to</th><th>End 1</th><th>End 2</th></tr></thead>
       <tbody>${pieceTable}</tbody>
     </table></div>` : `
-    <p class="note">Set the tape once for each group and make all its cuts. A piece's second cut sets its length.</p>
+    <p class="note">Set the tape on that fence once for each group and make all its cuts. A piece's second cut sets its length.</p>
     <div class="tape-groups">${tapeGroups}</div>`}
 
     <h3>Using the tape shims</h3>
     <div class="guide" id="tapeGuide">
-      ${tapeGuideSvg(s, selectedCorner === null ? null : frame.corners[selectedCorner])}
+      ${selectedGuideSvg(frame, s)}
       <div>
         ${cornerCaption(frame)}
         <div class="guide-label">Against the 45° fence:</div>
         <div class="seg guide-toggle" role="group" aria-label="Face against the fence">
           ${Object.entries(FENCE_FACES).map(([k, f]) => `<button type="button" data-fence-edge="${k}" class="${k === s.fenceEdge ? 'active' : ''}">${f.short}</button>`).join('')}
         </div>
-        <div>The strip goes on the <b>${face.side} side</b> of the fence so the long point ends up on the outside of the frame${
+        <div>Each end goes on the <b>${face.side} side</b> of its fence so the long point ends up on the outside of the frame${
           s.fenceEdge === 'goodInner' ? '. Lay the L <b>upside down</b>: the good wood\'s front edge on the sled, the cheap wood on top reaching over the fence.' : '.'}</div>
         <ul>
           <li><span class="tag far">FAR end</span> tape on the fence ~${f1(s.tapeDistance)} mm from the blade makes the mitre <b>${farEffect}</b> than 45°.</li>
           <li><span class="tag near">NEAR blade</span> tape on the fence right next to the blade makes it <b>${nearEffect}</b> than 45°.</li>
           <li>Stack the layers at one point only - the strip should still touch the bare fence (or its tape) at both points.</li>
+          <li>The two mating ends at each corner are cut on opposite fences, so if the jig's fences aren't exactly 45\u00B0 the errors cancel out and the joint still closes.</li>
         </ul>
       </div>
     </div>
@@ -457,15 +481,24 @@ function renderCutList() {
     </details>`;
 }
 
-// Which setup the tape diagram is showing, and which piece ends it cuts.
+// The sled diagram for the selected end (on its fence), or the general view.
+function selectedGuideSvg(frame, s) {
+  const e = selectedEnd ? findEnd(frame, selectedEnd) : null;
+  return e ? endGuideSvg(frame, s, e) : tapeGuideSvg(s);
+}
+function endGuideSvg(frame, s, e) {
+  const c = frame.corners[e.ci];
+  return tapeGuideSvg(s, c, { mirror: e.fence === 'left', heading: `${CORNER_SYMBOL[e.key]} ${e.strip.name} \u00B7 ${e.label}`, fenceSide: e.fence });
+}
+
+// Which end the tape diagram is showing, and its mate on the other fence.
 function cornerCaption(frame) {
-  if (selectedCorner === null) {
-    return '<p class="guide-pick">Tap a tape setup in the cut list to show it here.</p>';
-  }
-  const c = frame.corners[selectedCorner], t = c.tape;
-  const ends = frame.strips.flatMap((st) => pieceEnds(frame, st)).filter((e) => e.ci === selectedCorner).map((e) => `the ${e.strip.name.toLowerCase()} piece's ${e.label}`);
-  return `<div class="guide-pick active"><b>${c.key} (${c.name})</b>: ${tapeWords(t)}, to cut <span class="angle">${f2(t.result)}°</span>
-    for the ${f2(c.mitre)}° mitre. Used for ${ends.join(' and ')}.
+  const e = selectedEnd ? findEnd(frame, selectedEnd) : null;
+  if (!e) return '<p class="guide-pick">Tap a tape setup in the cut list to show it here.</p>';
+  const c = frame.corners[e.ci], t = c.tape;
+  const mate = frame.strips.flatMap((st) => pieceEnds(frame, st)).find((x) => x.ci === e.ci && x.cut !== e.cut);
+  return `<div class="guide-pick active">${symbolBadge(e.key)} <b>${e.strip.name} piece, ${e.label}</b> on the <b>${e.fence}-hand fence</b>: ${tapeWords(t)}, to cut <span class="angle">${f2(t.result)}\u00B0</span>
+    for the ${f2(c.mitre)}\u00B0 mitre.${mate ? ` Its mate, the ${mate.strip.name.toLowerCase()} piece's ${mate.label}, goes on the ${mate.fence}-hand fence with the same tape.` : ''}
     <button type="button" class="link" data-corner-clear>Show both points</button></div>`;
 }
 
@@ -496,10 +529,10 @@ function renderWorkshop() {
     <div class="ws-ends">${ends.map((e) => {
       const c = frame.corners[e.ci];
       return `<div class="ws-end${done[e.cut] ? ' cut-done' : ''}">
-        <div class="ws-end-head"><b>${e.label[0].toUpperCase() + e.label.slice(1)}</b> <span class="sub">${e.key}</span></div>
-        <div class="ws-end-main"><span class="ws-angle">${f2(c.mitre)}°</span> <span class="tape-chip big ${tapeClass(c.tape)}">${tapeText(c.tape)}</span></div>
+        <div class="ws-end-head"><span class="corner-symbol big">${CORNER_SYMBOL[e.key]}</span> <b>${e.label[0].toUpperCase() + e.label.slice(1)}</b> <span class="sub">${e.key}</span></div>
+        <div class="ws-end-main"><span class="ws-angle">${f2(c.mitre)}\u00B0</span> <span class="tape-chip big ${tapeClass(c.tape)}">${tapeText(c.tape)}</span> <span class="fence-badge big ${e.fence}">${e.fence === 'right' ? 'Right' : 'Left'} fence</span></div>
         <div class="ws-hint">${lengthHint(frame, e, true)}</div>
-        <div class="ws-sled">${tapeGuideSvg(s, c)}</div>
+        <div class="ws-sled">${endGuideSvg(frame, s, e)}</div>
         ${cur.id && !viewOnly ? `<label class="ws-tick"><input type="checkbox" data-cut="${e.cut}"${done[e.cut] ? ' checked' : ''}> Cut</label>` : ''}
       </div>`;
     }).join('')}</div>
@@ -539,15 +572,18 @@ function setupWorkshop() {
 // the kerf down to the right, and the L strip against one side of it. With a
 // corner, only that corner's tape point is lit and its stack of layers is drawn.
 let sledSeq = 0;
-function tapeGuideSvg(s, corner = null) {
+// mirror: draw the left-hand fence (the drawing flipped left to right).
+function tapeGuideSvg(s, corner = null, { mirror = false, heading = null, fenceSide = 'right' } = {}) {
   const uid = ++sledSeq; // unique ids: the diagram can appear more than once
   const c = Math.SQRT1_2;
   const K = 150, AY = 112; // kerf x, and where the fence's blade-side face meets the kerf
   // P(a, o): a along the fence away from the blade, o off the fence's blade-side
   // face (+ towards the blade, - towards the operator).
-  const P = (a, o) => [K + c * a + c * o, AY + c * a - c * o];
+  const MX = (x) => (mirror ? 330 - x : x);
+  const P = (a, o) => [MX(K + c * a + c * o), AY + c * a - c * o];
+  const flip = (anchor) => (!mirror ? anchor : anchor === 'end' ? 'start' : anchor === 'start' ? 'end' : anchor);
   const pts = (arr) => arr.map((q) => q.map((v) => v.toFixed(1)).join(',')).join(' ');
-  const rot = (q) => `rotate(45 ${q[0].toFixed(1)} ${q[1].toFixed(1)})`;
+  const rot = (q) => `rotate(${mirror ? -45 : 45} ${q[0].toFixed(1)} ${q[1].toFixed(1)})`;
   const FT = 12, GOOD = 14, CHEAP = 22, LEN = 190;
   const inside = s.cheapPosition !== 'under';
   const bladeSide = onInnerSide(s.fenceEdge);
@@ -580,7 +616,7 @@ function tapeGuideSvg(s, corner = null) {
   const near = P(-o0 + 14, face), far = P(175, face);
   const lblO = bladeSide ? Math.min(oMin, -FT) - 12 : Math.max(oMax, 0) + 12; // free side of the fence
   const nearL = P(-o0 + (bladeSide ? 44 : 30), lblO), farL = P(bladeSide ? 190 : 112, lblO);
-  const lblAnchor = bladeSide ? 'end' : 'start'; // keep labels clear of the fence
+  const lblAnchor = flip(bladeSide ? 'end' : 'start'); // keep labels clear of the fence
   const fence = [P(0, 0), P(235, 0), P(235, -FT), P(FT, -FT)];
   const fenceL = P(upsideDown ? 150 : 105, -FT / 2);
   // Selected corner: which point gets the tape, and how many layers.
@@ -605,9 +641,10 @@ function tapeGuideSvg(s, corner = null) {
         return `<line class="g-tape-line" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
       }).join('');
   }
+  const tx = mirror ? 314 : 16, ta = mirror ? 'end' : 'start';
   const title = corner
-    ? `<text class="g-title" x="16" y="66">${corner.key} corner</text>
-       <text class="g-muted" x="16" y="80">mitre ${f2(corner.mitre)}° → cut ${f2(tape.result)}°</text>`
+    ? `<text class="g-title" x="${tx}" y="66" text-anchor="${ta}">${heading || `${corner.key} corner`}</text>
+       <text class="g-muted" x="${tx}" y="80" text-anchor="${ta}">${fenceSide === 'right' ? 'right-hand' : 'left-hand'} fence \u00B7 mitre ${f2(corner.mitre)}\u00B0 \u2192 cut ${f2(tape.result)}\u00B0</text>`
     : '';
   const bandLabel = (b) => {
     const q = P(b.over ? 60 : 75, (b.oa + b.ob) / 2);
@@ -617,7 +654,7 @@ function tapeGuideSvg(s, corner = null) {
     <defs><clipPath id="sledClip${uid}"><rect x="6" y="46" width="318" height="248" rx="6"/></clipPath>
       <marker id="gArrow${uid}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" class="g-arrowhead"/></marker></defs>
     <rect class="g-sled" x="6" y="46" width="318" height="248" rx="6"/>
-    <line class="g-kerf" x1="${K}" y1="46" x2="${K}" y2="294"/>
+    <line class="g-kerf" x1="${MX(K)}" y1="46" x2="${MX(K)}" y2="294"/>
     <g clip-path="url(#sledClip${uid})">
       <polygon class="g-offcut" points="${pts(offcut)}"/>
       <polygon class="g-fence" points="${pts(fence)}"/>
@@ -625,18 +662,18 @@ function tapeGuideSvg(s, corner = null) {
     </g>
     ${bands.map(bandLabel).join('')}
     <text class="g-fence-t" x="${fenceL[0]}" y="${fenceL[1]}" text-anchor="middle" dominant-baseline="middle" transform="${rot(fenceL)}">45° fence</text>
-    <rect class="g-blade" x="${K - 2.5}" y="6" width="5" height="36" rx="1"/>
-    <text class="g-blade-t" x="${K + 8}" y="24">blade</text>
+    <rect class="g-blade" x="${MX(K) - 2.5}" y="6" width="5" height="36" rx="1"/>
+    <text class="g-blade-t" x="${MX(K + 8)}" y="24" text-anchor="${flip('start')}">blade</text>
     <circle class="g-tip" cx="${tip[0]}" cy="${tip[1]}" r="3.5"/>
-    <text class="g-ink" x="${K - 7}" y="${tip[1] + 4}" text-anchor="end">long point</text>
+    <text class="g-ink" x="${MX(K - 7)}" y="${tip[1] + 4}" text-anchor="${flip('end')}">long point</text>
     ${stack}
     <circle class="${lit('near') ? 'g-near' : 'g-off'}" cx="${near[0]}" cy="${near[1]}" r="5.5"/>
     ${pointLabel('near', nearL[0], nearL[1] + 4, 'NEAR')}
     <circle class="${lit('far') ? 'g-far' : 'g-off'}" cx="${far[0]}" cy="${far[1]}" r="5.5"/>
     ${pointLabel('far', farL[0], farL[1] + 4, `FAR · ${f1(s.tapeDistance)} mm`)}
     ${title}
-    <line class="g-arrow" x1="28" y1="270" x2="28" y2="215" marker-end="url(#gArrow${uid})"/>
-    <text class="g-muted" x="28" y="284" text-anchor="middle">feed</text>
+    <line class="g-arrow" x1="${MX(28)}" y1="270" x2="${MX(28)}" y2="215" marker-end="url(#gArrow${uid})"/>
+    <text class="g-muted" x="${MX(28)}" y="284" text-anchor="middle">feed</text>
   </svg>`;
 }
 
@@ -1724,10 +1761,10 @@ function bindEvents() {
     if (view) { saveUi({ cutView: view.dataset.cutView }); renderCutList(); return; }
     if (e.target.closest('[data-workshop]')) { openWorkshop(); return; }
     if (e.target.closest('[data-cuts-clear]')) { clearCuts(); return; }
-    const pick = e.target.closest('[data-corner]');
+    const pick = e.target.closest('[data-end]');
     if (pick || e.target.closest('[data-corner-clear]')) {
-      const i = pick ? Number(pick.dataset.corner) : null;
-      selectedCorner = i === selectedCorner ? null : i;
+      const end = pick ? pick.dataset.end : null;
+      selectedEnd = end === selectedEnd ? null : end;
       renderCutList();
       if (pick) $('#tapeGuide').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       return;

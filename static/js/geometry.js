@@ -19,6 +19,9 @@ export const CORNERS = [
   { key: 'TL', name: 'Top-left' },
 ];
 
+// A simple shape per corner, easy to pencil on both mating ends so they're paired up at glue-up.
+export const CORNER_SYMBOL = { TL: '○', TR: '△', BR: '□', BL: '✕' };
+
 export const SIDES = [
   { key: 'bottom', name: 'Bottom' },
   { key: 'right', name: 'Right' },

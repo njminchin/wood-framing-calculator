@@ -7,6 +7,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.14.0',
+    date: '2026-09-30',
+    changes: [
+      'Each end now says which fence of the 45° jig it’s cut on: L fence or R fence, as you stand at the sled. A piece’s two ends always go on opposite fences, and so do the two mating cuts at each corner, so any error in the jig’s angles cancels out.',
+      'The sled diagram and the Workshop view draw each end on its own fence (the left-hand one mirrored).',
+      '“By tape setup” now groups cuts by fence as well, since you tape each fence separately.',
+      'Each corner has a symbol to pencil on both of its mating ends: ○ top-left, △ top-right, □ bottom-right, ✕ bottom-left. They’re shown in the cut list, the Workshop view and the technical drawing.',
+    ],
+  },
+  {
     version: '1.13.0',
     date: '2026-09-30',
     changes: [

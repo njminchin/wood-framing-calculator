@@ -1,5 +1,5 @@
 // Technical drawing (SVG) of the frame and its 8 strips.
-import { stripLocal, FENCE_FACES } from './geometry.js';
+import { stripLocal, FENCE_FACES, CORNER_SYMBOL } from './geometry.js';
 
 const f1 = (v) => v.toFixed(1);
 const f2 = (v) => v.toFixed(2);
@@ -185,7 +185,8 @@ export function buildDrawing(frame, meta, settings) {
       const dx = p[0] - cx, dy = p[1] - cy;
       const l = Math.hypot(dx, dy);
       const q = [p[0] + (dx / l) * 30, p[1] + (dy / l) * 30];
-      s.text(q[0], q[1], `${c.key} ${f2(c.angle)}°`, { size: 10.5, anchor: dx < 0 ? 'end' : 'start', baseline: 'middle', cls: 'angle' });
+      // The same symbol as in the cut list, to pencil on the two mating ends at this corner.
+      s.text(q[0], q[1], `${CORNER_SYMBOL[c.key]} ${c.key} ${f2(c.angle)}°`, { size: 10.5, anchor: dx < 0 ? 'end' : 'start', baseline: 'middle', cls: 'angle' });
     });
     // Section marker A-A across the left strip
     const mid = [(P.good.outer[0][0] + P.good.outer[3][0]) / 2, (P.good.outer[0][1] + P.good.outer[3][1]) / 2];
@@ -281,9 +282,9 @@ export function buildDrawing(frame, meta, settings) {
 
       const cL = corners[j], cR = corners[i];
       s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] - 4, `${f2(cL.mitre)}°`, { size: 11, anchor: 'end', cls: 'angle' });
-      s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] + 9, `${cL.key} end`, { size: 9, anchor: 'end', cls: 'muted' });
+      s.text(Math.min(outerL[0], innerL[0]) - 10, outerL[1] + 9, `${CORNER_SYMBOL[cL.key]} ${cL.key} end`, { size: 9, anchor: 'end', cls: 'muted' });
       s.text(rightmost + 56, outerR[1] - 4, `${f2(cR.mitre)}°`, { size: 11, cls: 'angle' });
-      s.text(rightmost + 56, outerR[1] + 9, `${cR.key} end`, { size: 9, cls: 'muted' });
+      s.text(rightmost + 56, outerR[1] + 9, `${CORNER_SYMBOL[cR.key]} ${cR.key} end`, { size: 9, cls: 'muted' });
 
       // Label column
       s.text(M, top - 2, `${st.name.toUpperCase()}`, { size: 13, weight: 'bold' });

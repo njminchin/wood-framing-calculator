@@ -43,7 +43,7 @@ document.getElementById('f').onload = async () => {
   d.querySelector('#quickLoad').dispatchEvent(new w.Event('change'));
   await sleep(500);
   if (scene === 'tape') {
-    d.querySelector('.cut-table [data-corner="1"]').click(); await sleep(200);
+    d.querySelector('.cut-table [data-end="top:TL"]').click(); await sleep(200);
     d.querySelector('#tapeGuide').scrollIntoView({ block: 'end' }); w.scrollBy(0, 20);
   } else if (scene === 'model') {
     d.querySelector('[data-tab="model"]').click();
