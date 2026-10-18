@@ -105,6 +105,8 @@ The script is meant for Ubuntu 22.04/24.04 and Oracle Linux 8/9, on x86 or ARM.
 
 The address, path and DuckDNS token are remembered, so later updates only need `sh install-vps.sh`.
 
+**Other apps on the same server.** The Caddyfile this script writes always includes `import /etc/caddy/apps.d/*.caddy`, so other apps can add their own paths in that folder (e.g. LEGO Gear Ratio Calculator at `/gearapp/`) and keep them when this script rewrites the Caddyfile.
+
 - **Inviting people:** send them the address and the invite code. They choose **Create account** on the sign-in page.
 - **Update:** copy a newer `.pyz` over and run the script again. Accounts, libraries and the invite code are all kept.
 - **One-step updates from your PC:** copy `deploy/deploy.example.json` to `deploy/deploy.local.json` (git ignores it) and fill in the server address, SSH user, key file and site address. Then run `powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1`. It builds the app, backs up the server's data to `~/backups` (keeping the last 10), installs the update without asking anything, and checks the site answers.

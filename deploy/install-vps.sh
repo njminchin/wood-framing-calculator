@@ -36,6 +36,9 @@ DUCK_NAME=""
 DUCK_ENV=/etc/floating-frame/duckdns.env
 CADDYFILE="${FRAME_CADDYFILE:-/etc/caddy/Caddyfile}"  # override only for testing
 MARKER="# floating-frame (managed by install-vps.sh)"
+# Other apps on this server (e.g. LEGO Gear Ratio Calculator) add their Caddy
+# config here; the site block always imports it, so rewrites don't drop them.
+APPS_DIR="$(dirname "$CADDYFILE")/apps.d"
 
 PYTHON="$(command -v python3 || true)"
 [ -n "$PYTHON" ] || { echo "python3 not found. Install it first (sudo apt install python3 / sudo dnf install python3)."; exit 1; }
@@ -236,11 +239,12 @@ fi
 if sudo grep -q basic_auth "$CADDYFILE" 2>/dev/null; then
   echo "Replacing the old Caddy password box with the app's own sign-in."
 fi
-sudo mkdir -p "$(dirname "$CADDYFILE")"
+sudo mkdir -p "$(dirname "$CADDYFILE")" "$APPS_DIR"
 if [ -z "$BASE_PATH" ]; then
   sudo tee "$CADDYFILE" >/dev/null <<CADDY
 $MARKER
 $DOMAIN {
+	import $APPS_DIR/*.caddy
 	encode gzip
 	reverse_proxy 127.0.0.1:$APP_PORT
 }
@@ -250,6 +254,7 @@ else
   sudo tee "$CADDYFILE" >/dev/null <<CADDY
 $MARKER
 $DOMAIN {
+	import $APPS_DIR/*.caddy
 	encode gzip
 	redir / $BASE_PATH/
 	redir $BASE_PATH $BASE_PATH/
