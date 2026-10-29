@@ -107,20 +107,21 @@ The address, path and DuckDNS token are remembered, so later updates only need `
 
 **Other apps on the same server.** The Caddyfile this script writes always includes `import /etc/caddy/apps.d/*.caddy`, so other apps can add their own paths in that folder (e.g. LEGO Gear Ratio Calculator at `/gearapp/`) and keep them when this script rewrites the Caddyfile.
 
-- **Inviting people:** send them the address and the invite code. They choose **Create account** on the sign-in page.
+- **Inviting people:** send them the address and the invite code. They choose **Create account** on the sign-in page and sign up with their email address.
 - **Update:** copy a newer `.pyz` over and run the script again. Accounts, libraries and the invite code are all kept.
 - **One-step updates from your PC:** copy `deploy/deploy.example.json` to `deploy/deploy.local.json` (git ignores it) and fill in the server address, SSH user, key file and site address. Then run `powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1`. It builds the app, backs up the server's data to `~/backups` (keeping the last 10), installs the update without asking anything, and checks the site answers.
 - **Install it on a phone:** open the address in Chrome and choose **Install app** (under the title, or in Chrome's ⋮ menu). It gets its own icon and opens full screen like an app. This needs HTTPS, so it works on the VPS but not over plain `http://` on your home network.
 - **Managing accounts:** run these on the server. Changes take effect straight away.
   - `sh install-vps.sh --list-users` shows who has an account, and the current invite code.
-  - `sh install-vps.sh --add-user alice` creates an account for someone yourself.
-  - `sh install-vps.sh --reset-password alice` sets a new password for someone who's forgotten theirs. They're signed out everywhere.
+  - `sh install-vps.sh --add-user alice@example.com` creates an account for someone yourself.
+  - `sh install-vps.sh --reset-password alice@example.com` sets a new password for someone who's forgotten theirs (their email or, for older accounts, their username). They're signed out everywhere. Passwords are stored as one-way hashes, so nobody can look up an existing password; resetting it is the only way back in.
   - `sh install-vps.sh --remove-user alice` deletes an account. Their library stays on disk in `data/users/`.
   - `sh install-vps.sh --new-invite-code` makes a new code. The old one stops working, but existing accounts aren't affected.
   - `sh install-vps.sh --disable-signup` turns sign-up off.
   - `sh install-vps.sh --make-admin alice` / `--remove-admin alice` choose who can see and change the invite code in the app (under **Invite code**, top right). The first account is the admin by default.
 - **Staying signed in:** you stay signed in on each browser for a year from your last visit, including after restarts. You're signed out when you choose **Sign out**, when your password changes, or after a year without visiting.
-- **Changing your own password:** once signed in, use **Change password** at the top right of the app.
+- **Your account:** the account button at the top right (your email, or a person icon on a phone) has **Change email address**, **Change password** and **Sign out**.
+- **Email sign-in:** people sign in with their email address. Accounts created before this have a username, which still works; after signing in they're asked to add an email (they can choose *Later*).
 - **Security:** passwords are stored as salted hashes, never in plain text. After 5 wrong guesses, sign-in is blocked for 15 minutes for that address and that username.
 - **Back up:** everything is in `~/floating-frame/data` on the server, e.g. `scp -r ubuntu@<server-ip>:floating-frame/data backup/`.
 - **Logs:** `sudo journalctl -u caddy -n 50` (HTTPS) and `sudo journalctl -u floating-frame -n 50` (the app).

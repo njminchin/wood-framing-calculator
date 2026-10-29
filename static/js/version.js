@@ -7,6 +7,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.0',
+    date: '2026-10-29',
+    changes: [
+      'New Account button at the top right (a person icon on a phone). It shows who you’re signed in as and has Change email address, Change password and Sign out.',
+      'Sign in with your email address. New accounts are created with an email; if your account has a username, it still works.',
+      'If your account doesn’t have an email yet, you’ll be asked to add one after signing in (or choose Later).',
+    ],
+  },
+  {
     version: '1.14.2',
     date: '2026-10-18',
     changes: [

@@ -5,7 +5,10 @@
 - Passwords are stored as salted PBKDF2-SHA256 hashes.
 - Sessions are random tokens in an HttpOnly cookie; only their SHA-256 is stored.
   They last a year from the last visit.
-- Repeated failed sign-ins (or invite codes) are throttled per IP and per username.
+- People sign in with their email address. Accounts made before that have a username,
+  which still works; they're asked to add an email. The username stays the account's
+  key (it names the browser drafts), so for new accounts it's simply the email.
+- Repeated failed sign-ins (or invite codes) are throttled per IP and per name.
 - Admins can see and change the invite code in the app. The first account is
   the admin unless someone has been made admin explicitly.
 
@@ -31,6 +34,7 @@ SESSION_SECONDS = 365 * 24 * 3600
 RENEW_AFTER = 24 * 3600
 MIN_PASSWORD = 8
 NAME_RE = re.compile(r"[A-Za-z0-9._@-]{2,40}")
+EMAIL_RE = re.compile(r"[^@\s]{1,64}@[^@\s.]+(\.[^@\s.]+)+")
 MAX_FAILURES = 5
 FAILURE_WINDOW = 15 * 60
 INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I lookalikes
@@ -115,9 +119,7 @@ class Accounts:
     def set_admin(self, username, admin):
         with self.lock:
             data = self._accounts()
-            user = next((u for u in data["users"] if u["username"].casefold() == str(username).casefold()), None)
-            if user is None:
-                raise AccountError(f"There's no account called '{username}'.")
+            user = self._lookup(data, username)
             # Turn the implicit "first account is admin" into an explicit flag before changing anything.
             if not any(u.get("admin") for u in data["users"]):
                 data["users"][0]["admin"] = True
@@ -133,9 +135,28 @@ class Accounts:
     def list_users(self):
         return self._accounts()["users"]
 
-    def find(self, username):
-        key = str(username or "").casefold()
-        return next((u for u in self._accounts()["users"] if u["username"].casefold() == key), None)
+    @staticmethod
+    def email_of(user):
+        """The account's email: set explicitly, or a username that is already an email."""
+        if user.get("email"):
+            return user["email"]
+        return user["username"] if EMAIL_RE.fullmatch(user["username"]) else None
+
+    @classmethod
+    def _matches(cls, user, name):
+        key = str(name or "").strip().casefold()
+        return bool(key) and key in (user["username"].casefold(), (cls.email_of(user) or "").casefold())
+
+    def _lookup(self, data, name):
+        """The account with this email or username, or an AccountError."""
+        user = next((u for u in data["users"] if self._matches(u, name)), None)
+        if user is None:
+            raise AccountError(f"There's no account for '{name}'.")
+        return user
+
+    def find(self, name):
+        """The account with this email or username, or None."""
+        return next((u for u in self._accounts()["users"] if self._matches(u, name)), None)
 
     def get(self, user_id):
         return next((u for u in self._accounts()["users"] if u["id"] == user_id), None)
@@ -145,19 +166,23 @@ class Accounts:
         if len(password or "") < MIN_PASSWORD:
             raise AccountError(f"Passwords need at least {MIN_PASSWORD} characters.")
 
-    def create(self, username, password):
-        """Create an account. The very first account takes over any existing
-        single-user library (data/db.json and data/images) so nothing is lost."""
-        username = str(username or "").strip()
-        if not NAME_RE.fullmatch(username):
-            raise AccountError("Usernames need 2-40 characters: letters, numbers and . _ @ -")
+    def create(self, name, password):
+        """Create an account from an email address (or, from the command line, a plain
+        username). The very first account takes over any existing single-user library
+        (data/db.json and data/images) so nothing is lost."""
+        name = str(name or "").strip()
+        is_email = bool(EMAIL_RE.fullmatch(name)) and len(name) <= 254
+        if not is_email and not NAME_RE.fullmatch(name):
+            raise AccountError("Enter a valid email address.")
         self._check_new_password(password)
         with self.lock:
             data = self._accounts()
-            if any(u["username"].casefold() == username.casefold() for u in data["users"]):
-                raise AccountError("That username is taken.")
-            user = {"id": uuid.uuid4().hex[:12], "username": username,
+            if any(self._matches(u, name) for u in data["users"]):
+                raise AccountError("There's already an account with that email." if is_email else "That username is taken.")
+            user = {"id": uuid.uuid4().hex[:12], "username": name,
                     "password": hash_password(password), "createdAt": time.time()}
+            if is_email:
+                user["email"] = name
             first = not data["users"]
             data["users"].append(user)
             self._write(self.accounts_path, data)
@@ -180,21 +205,33 @@ class Accounts:
         self._check_new_password(password)
         with self.lock:
             data = self._accounts()
-            user = next((u for u in data["users"] if u["username"].casefold() == str(username).casefold()), None)
-            if user is None:
-                raise AccountError(f"There's no account called '{username}'.")
+            user = self._lookup(data, username)
             user["password"] = hash_password(password)
             self._write(self.accounts_path, data)
         self.end_sessions_for(user["id"])  # sign out everywhere else
+        return user
+
+    def set_email(self, user_id, email):
+        """Add or change an account's email (it can then be used to sign in)."""
+        email = str(email or "").strip()
+        if not EMAIL_RE.fullmatch(email) or len(email) > 254:
+            raise AccountError("Enter a valid email address.")
+        with self.lock:
+            data = self._accounts()
+            user = next((u for u in data["users"] if u["id"] == user_id), None)
+            if user is None:
+                raise AccountError("That account no longer exists.")
+            if any(u["id"] != user_id and self._matches(u, email) for u in data["users"]):
+                raise AccountError("Another account already uses that email.")
+            user["email"] = email
+            self._write(self.accounts_path, data)
         return user
 
     def delete(self, username):
         """Remove the account. Their library folder is left on disk."""
         with self.lock:
             data = self._accounts()
-            user = next((u for u in data["users"] if u["username"].casefold() == str(username).casefold()), None)
-            if user is None:
-                raise AccountError(f"There's no account called '{username}'.")
+            user = self._lookup(data, username)
             data["users"] = [u for u in data["users"] if u["id"] != user["id"]]
             self._write(self.accounts_path, data)
         self.end_sessions_for(user["id"])

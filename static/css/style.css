@@ -398,6 +398,16 @@ body.has-dock .toast { bottom: 76px; }
 
 .notify-check { color: var(--text); margin: 6px 0 4px; }
 
+/* Account */
+.account-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; max-width: 240px; color: var(--text); }
+.account-btn svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.account-btn .user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.account-btn.needs-email::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.account-who { margin: 0 0 10px; overflow-wrap: anywhere; }
+.account-actions { display: grid; gap: 8px; }
+.account-actions button { text-align: left; padding: 9px 12px; }
+.account-actions .sign-out { color: var(--err-ink); }
+
 /* Settings (cutting setup and SKU numbering) */
 .icon-button { line-height: 0; padding: 6px 8px; position: relative; color: var(--muted); }
 .icon-button:hover { color: var(--text); }
@@ -520,7 +530,7 @@ details.accuracy { margin-top: 18px; }
 .share-banner { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 6px 12px; }
 .share-banner .sub { color: var(--muted); }
 body.view-only .quickload, body.view-only #btnNew, body.view-only #btnSave, body.view-only #btnSaveAsNew,
-body.view-only #btnShare, body.view-only #userMenu, body.view-only #cardSku, body.view-only #cardTimer, body.view-only #statusSeg, body.view-only #timeBox, body.view-only #timerDock,
+body.view-only #btnShare, body.view-only #btnAccount, body.view-only #cardSku, body.view-only #cardTimer, body.view-only #statusSeg, body.view-only #timeBox, body.view-only #timerDock,
 body.view-only #btnSaveDefaults, body.view-only #btnResetDefaults, body.view-only #btnGenerateSku,
 body.view-only #btnTour, body.view-only .brand-sub .version-text, body.view-only .image-actions,
 body.view-only #matchHint { display: none !important; }
@@ -536,7 +546,6 @@ body.view-only .status-box.none { display: none; }
 .toast.err { background: #9b2019; }
 
 /* ---------- Accounts (hosted version) ---------- */
-.user-menu { display: flex; align-items: center; gap: 6px; margin-left: 8px; padding-left: 12px; border-left: 1px solid var(--line); }
 .user-name { font-weight: 600; font-size: 13px; }
 .dialog-small { width: min(420px, 94vw); }
 .auth-screen {
@@ -620,14 +629,13 @@ details.more > summary.changed::after { content: " \2022 changed"; font-weight: 
   .status-group:not(:has(:not([hidden]):not(:empty))) { display: none; }
   .actions > button { flex: 1 1 auto; padding: 7px 6px; font-size: 13px; }
   .actions > .icon-button { flex: 0 0 auto; padding: 6px 7px; }
-  .user-menu { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; padding-left: 0; border-left: none; }
+  .account-btn { flex: 0 0 auto !important; padding: 6px 7px; }
+  .account-btn .user-name { display: none; }
   .share-banner { flex-basis: 100%; }
   .layout { padding: 12px 10px 20px; gap: 12px; }
   .tabs { overflow-x: auto; scrollbar-width: none; gap: 0; }
   .tabs button { flex: none; padding: 9px 10px; white-space: nowrap; }
   .card { padding-left: 12px; padding-right: 12px; }
-  .user-menu { gap: 4px 8px; }
-  .user-menu .link { padding-left: 0; padding-right: 0; }
 }
 
 @media print {

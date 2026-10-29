@@ -1860,6 +1860,9 @@ function setAuthMode(mode) {
   for (const b of $$('#authTabs button')) b.classList.toggle('active', b.dataset.authMode === mode);
   for (const el of $$('[data-signup-only]')) el.hidden = mode !== 'signup';
   $('#authPass').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  $('#authUserLabel').textContent = mode === 'signup' ? 'Email' : 'Email (or username)';
+  $('#authUser').type = mode === 'signup' ? 'email' : 'text';
+  $('#authUser').autocomplete = mode === 'signup' ? 'email' : 'username';
   $('#authSubmit').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
   $('#authError').hidden = true;
 }
@@ -1872,7 +1875,8 @@ function bindAuthEvents(auth) {
   $('#authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = $('#authError');
-    const body = { username: $('#authUser').value.trim(), password: $('#authPass').value };
+    const who = $('#authUser').value.trim();
+    const body = authMode === 'signup' ? { email: who, password: $('#authPass').value } : { login: who, password: $('#authPass').value };
     if (authMode === 'signup') {
       if (body.password !== $('#authPass2').value) { err.textContent = "The passwords don't match."; err.hidden = false; return; }
       body.inviteCode = $('#authInvite').value;
@@ -1895,7 +1899,7 @@ function bindAuthEvents(auth) {
   };
 
   const dlg = $('#passwordDialog');
-  $('#btnChangePassword').onclick = () => { $('#passwordForm').reset(); $('#pwError').hidden = true; dlg.showModal(); };
+  $('#btnChangePassword').onclick = () => { $('#accountDialog').close(); $('#passwordForm').reset(); $('#pwError').hidden = true; dlg.showModal(); };
   $('#pwCancel').onclick = () => dlg.close();
   $('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1907,6 +1911,64 @@ function bindAuthEvents(auth) {
       toast('Password changed. Other devices have been signed out.');
     } catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
+}
+
+// The Account button and panel, and adding/changing the email you sign in with.
+let accountEmail = null;
+function showAccount(auth) {
+  accountEmail = auth.email || null;
+  const name = accountEmail || auth.user;
+  $('#userName').textContent = name;
+  $('#accountName').textContent = name;
+  $('#btnAccount').hidden = false;
+  $('#btnAccount').classList.toggle('needs-email', !accountEmail);
+  $('#btnAccount').title = `Signed in as ${name}: email, password, sign out`;
+  $('#btnChangeEmail').textContent = accountEmail ? 'Change email address' : 'Add your email address';
+  const note = $('#accountEmailNote');
+  note.hidden = !!accountEmail;
+  note.textContent = accountEmail ? '' : `You sign in with the username "${auth.user}". Add an email address so you can sign in with that instead.`;
+}
+
+const EMAIL_WHY = (user) => `Sign-in is moving from usernames to email addresses. They're easier to remember than a username, and they let the site owner know who you are if you ever need your password reset. Your username "${user}" will keep working too.`;
+
+function openEmailDialog(auth, { prompt = false } = {}) {
+  $('#emailForm').reset();
+  $('#emailError').hidden = true;
+  $('#emailTitle').textContent = accountEmail ? 'Change your email address' : 'Add your email address';
+  $('#emailWhy').textContent = accountEmail ? 'You\u2019ll sign in with the new address from now on.' : EMAIL_WHY(auth.user);
+  $('#emailNew').value = accountEmail || '';
+  $('#emailPassField').hidden = !accountEmail; // changing an existing email needs the password
+  $('#emailPass').required = !!accountEmail;
+  $('#emailCancel').textContent = prompt ? 'Later' : 'Cancel';
+  $('#emailDialog').showModal();
+  $('#emailNew').focus();
+}
+
+function setupAccount(auth) {
+  showAccount(auth);
+  const dlg = $('#accountDialog');
+  $('#btnAccount').onclick = () => dlg.showModal();
+  $('#accountClose').onclick = () => dlg.close();
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  $('#btnChangeEmail').onclick = () => { dlg.close(); openEmailDialog(auth); };
+  $('#emailCancel').onclick = () => {
+    try { sessionStorage.setItem('floating-frame:email-later', '1'); } catch { /* ignore */ }
+    $('#emailDialog').close();
+  };
+  $('#emailForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#emailError');
+    try {
+      const res = await api.authPost('email', { email: $('#emailNew').value.trim(), password: $('#emailPass').value });
+      $('#emailDialog').close();
+      showAccount({ ...auth, email: res.email });
+      toast(`Saved. You can now sign in with ${res.email}.`);
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+  // Older accounts (username only): ask once per browser session, after the page has settled.
+  let later = false;
+  try { later = !!sessionStorage.getItem('floating-frame:email-later'); } catch { /* ignore */ }
+  if (auth.needsEmail && !later) setTimeout(() => { if (!document.querySelector('dialog[open]')) openEmailDialog(auth, { prompt: true }); }, 900);
 }
 
 // ---------------------------------------------------------------- Version / what's new
@@ -1995,7 +2057,7 @@ function setupInviteDialog() {
   };
   const run = async (fn) => { try { show((await fn()).inviteCode); } catch (e) { toast(e.message, true); } };
   $('#btnInvite').hidden = false;
-  $('#btnInvite').onclick = async () => { await run(api.invite); dlg.showModal(); };
+  $('#btnInvite').onclick = async () => { $('#accountDialog').close(); await run(api.invite); dlg.showModal(); };
   $('#inviteClose').onclick = () => dlg.close();
   $('#inviteNew').onclick = () => {
     if (confirm('Make a new invite code? The current one will stop working.')) run(() => api.inviteAction('new'));
@@ -2040,9 +2102,8 @@ async function init() {
     bindAuthEvents(auth);
     if (!auth.user) { showAuth(); return; }
     currentUser = auth.user;
-    $('#userName').textContent = auth.user;
+    setupAccount(auth);
     if (auth.admin) setupInviteDialog();
-    $('#userMenu').hidden = false;
   }
 
   $('#s-species').innerHTML = Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');

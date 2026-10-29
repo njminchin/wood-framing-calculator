@@ -48,12 +48,7 @@
       <button id="btnSave" type="button" class="primary" title="Ctrl+S">Save</button>
       <button id="btnSaveAsNew" type="button" title="Save a copy as a new painting, leaving the original unchanged (Ctrl+Shift+S)">Save as new</button>
       <button id="btnSettings" type="button" class="icon-button" title="Settings: cutting setup, build timer and SKU numbering" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
-      <div id="userMenu" class="user-menu" hidden>
-        <span id="userName" class="user-name"></span>
-        <button id="btnInvite" type="button" class="link" hidden>Invite code</button>
-        <button id="btnChangePassword" type="button" class="link">Change password</button>
-        <button id="btnSignOut" type="button" class="link">Sign out</button>
-      </div>
+      <button id="btnAccount" type="button" class="account-btn" hidden title="Your account: email, password, sign out"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg><span id="userName" class="user-name"></span></button>
     </div>
   </header>
 
@@ -369,6 +364,35 @@
     </div>
   </dialog>
 
+  <dialog id="accountDialog" class="dialog dialog-small">
+    <div class="dialog-head">
+      <h2>Account</h2>
+      <button type="button" class="link" id="accountClose">Close</button>
+    </div>
+    <p class="account-who">Signed in as <b id="accountName"></b></p>
+    <p id="accountEmailNote" class="help" hidden></p>
+    <div class="account-actions">
+      <button type="button" id="btnChangeEmail">Add your email address</button>
+      <button type="button" id="btnChangePassword">Change password</button>
+      <button type="button" id="btnInvite" hidden>Invite code</button>
+      <button type="button" id="btnSignOut" class="sign-out">Sign out</button>
+    </div>
+  </dialog>
+
+  <dialog id="emailDialog" class="dialog dialog-small">
+    <form id="emailForm">
+      <div class="dialog-head"><h2 id="emailTitle">Add your email address</h2></div>
+      <p class="help" id="emailWhy"></p>
+      <div class="field"><label for="emailNew">Email address</label><input id="emailNew" type="email" autocomplete="email" required></div>
+      <div class="field" id="emailPassField" hidden><label for="emailPass">Your password</label><input id="emailPass" type="password" autocomplete="current-password"></div>
+      <p id="emailError" class="alert err" hidden></p>
+      <div class="button-row">
+        <button type="submit" class="primary" id="emailSave">Save</button>
+        <button type="button" class="link" id="emailCancel">Later</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="passwordDialog" class="dialog dialog-small">
     <form id="passwordForm">
       <div class="dialog-head"><h2>Change password</h2></div>
@@ -470,7 +494,7 @@
         <button type="button" data-auth-mode="login" class="active">Sign in</button>
         <button type="button" data-auth-mode="signup">Create account</button>
       </div>
-      <div class="field"><label for="authUser">Username</label><input id="authUser" autocomplete="username" required></div>
+      <div class="field"><label for="authUser" id="authUserLabel">Email</label><input id="authUser" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
       <div class="field"><label for="authPass">Password</label><input id="authPass" type="password" autocomplete="current-password" required></div>
       <div class="field" data-signup-only hidden><label for="authPass2">Repeat password</label><input id="authPass2" type="password" autocomplete="new-password"></div>
       <div class="field" data-signup-only hidden><label for="authInvite">Invite code</label><input id="authInvite" autocomplete="off" placeholder="From the person who sent you the link"></div>

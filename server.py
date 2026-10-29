@@ -36,7 +36,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from accounts import SESSION_SECONDS, AccountError, Accounts, random_invite_code
+from accounts import EMAIL_RE, SESSION_SECONDS, AccountError, Accounts, random_invite_code
 
 # The app can run as a plain script, from a zipapp (.pyz) or as a PyInstaller exe.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -311,7 +311,9 @@ class Handler(BaseHTTPRequestHandler):
         user = self._user()
         return {
             "accounts": ACCOUNTS is not None,
-            "user": user["username"] if user else None,
+            "user": user["username"] if user else None,  # the account's stable key
+            "email": ACCOUNTS.email_of(user) if user else None,
+            "needsEmail": bool(user and not ACCOUNTS.email_of(user)),
             "signup": bool(ACCOUNTS and ACCOUNTS.invite_code),
             "admin": bool(user and ACCOUNTS.is_admin(user)),
         }
@@ -351,7 +353,21 @@ class Handler(BaseHTTPRequestHandler):
             token = ACCOUNTS.new_session(user)  # other devices were signed out
             return self._json({"ok": True}, headers=[self._session_cookie(token)])
 
-        username = str(body.get("username", "")).strip()
+        if action == "email":
+            user = self._user()
+            if user is None:
+                return self._error(HTTPStatus.UNAUTHORIZED, "Please sign in")
+            # Changing an existing email needs the password; adding the first one doesn't.
+            if ACCOUNTS.email_of(user) and not ACCOUNTS.verify(user["username"], body.get("password")):
+                return self._error(HTTPStatus.FORBIDDEN, "Your password isn't right.")
+            try:
+                user = ACCOUNTS.set_email(user["id"], body.get("email"))
+            except AccountError as e:
+                return self._error(HTTPStatus.BAD_REQUEST, str(e))
+            return self._json({"ok": True, "email": ACCOUNTS.email_of(user)})
+
+        # Sign in with an email (or an older account's username); sign up with an email.
+        username = str(body.get("email") or body.get("login") or body.get("username") or "").strip()
         keys = [f"ip:{ip}", f"user:{username.casefold()}"]
         wait = ACCOUNTS.throttled(*keys)
         if wait:
@@ -361,13 +377,15 @@ class Handler(BaseHTTPRequestHandler):
             user = ACCOUNTS.verify(username, body.get("password"))
             if user is None:
                 ACCOUNTS.note_failure(*keys)
-                return self._error(HTTPStatus.UNAUTHORIZED, "Wrong username or password.")
+                return self._error(HTTPStatus.UNAUTHORIZED, "Wrong email or password.")
         elif action == "signup":
             if not ACCOUNTS.invite_code:
                 return self._error(HTTPStatus.FORBIDDEN, "Sign-up is closed. Ask the site owner for an account.")
             if not ACCOUNTS.check_invite(body.get("inviteCode")):
                 ACCOUNTS.note_failure(f"ip:{ip}")
                 return self._error(HTTPStatus.FORBIDDEN, "That invite code isn't right.")
+            if not EMAIL_RE.fullmatch(username):
+                return self._error(HTTPStatus.BAD_REQUEST, "Enter your email address.")
             try:
                 user = ACCOUNTS.create(username, body.get("password"))
             except AccountError as e:
@@ -461,7 +479,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         try:
-            m = re.fullmatch(r"/api/auth/(login|signup|logout|password)", path)
+            m = re.fullmatch(r"/api/auth/(login|signup|logout|password|email)", path)
             if m:
                 return self._auth_post(m.group(1), self._json_body())
             if path == "/api/admin/invite":
@@ -762,7 +780,9 @@ def account_command(argv):
             print(f"Accounts in {DATA_DIR}:")
             for u in users:
                 role = "  [admin]" if accounts.is_admin(u) else ""
-                print(f"  {u['username']}{role}  (library: {accounts.user_dir(u)})")
+                email = accounts.email_of(u)
+                shown = u['username'] + (f" <{email}>" if email and email != u['username'] else "" if email else "  (no email yet)")
+                print(f"  {shown}{role}  (library: {accounts.user_dir(u)})")
             if not users:
                 print("  (none)")
             code = accounts.invite_code
@@ -776,7 +796,7 @@ def account_command(argv):
         elif "--reset-password" in argv:
             name = arg_after("--reset-password")
             if not accounts.find(name):
-                raise AccountError(f"There's no account called '{name}'.")
+                raise AccountError(f"There's no account for '{name}'.")
             accounts.set_password(name, _ask_new_password(name))
             print(f"Password changed for '{name}' (signed out everywhere).")
         elif "--delete-user" in argv:
