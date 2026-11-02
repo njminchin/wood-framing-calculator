@@ -7,6 +7,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.1',
+    date: '2026-11-02',
+    changes: [
+      'Server setup: other apps on the same server can now have a web address of their own.',
+    ],
+  },
+  {
     version: '1.15.0',
     date: '2026-10-29',
     changes: [
